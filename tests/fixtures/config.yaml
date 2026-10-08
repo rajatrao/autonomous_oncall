@@ -1,0 +1,33 @@
+config_version: "1"
+organization: {name: test-org}
+state: {backend: sqlite, url: "${ONCALL_TEST_DB:-/tmp/oncall-test.db}"}
+integrations:
+  observability: {provider: mock, fixture: "${ONCALL_FIXTURE}"}
+  logs: {provider: mock, fixture: "${ONCALL_FIXTURE}"}
+  traces: {provider: none}
+  changes: {provider: mock, fixture: "${ONCALL_FIXTURE}"}
+  remediation: {provider: mock, fixture: "${ONCALL_FIXTURE}"}
+  communications: {provider: log}
+  knowledge: {provider: filesystem, runbooks_dir: "${ONCALL_RUNBOOKS:-tests/fixtures/runbooks}"}
+autonomy:
+  mode: autonomous
+  remediation: {default: approval_required, failover: "${ONCALL_FAILOVER_MODE:-automatic}", rollback: automatic}
+remediation:
+  allowed_services: ["*"]
+  failover_targets:
+    geo-provider-a: [geo-provider-b]
+  min_confidence: 0.8
+runner:
+  type: "${ONCALL_RUNNER:-none}"
+  agent_ref: "${ONCALL_AGENT_REF:-dist/oncall-agent.yaml}"
+  api_url: "${ONCALL_AGENT_API:-http://127.0.0.1:8080}"
+  agent_id: oncall-agent
+  binary: "${ONCALL_DOCKER_AGENT:-docker-agent}"
+  flavors: [scripted-model]
+  extra_args: ["--data-dir", "${ONCALL_DA_DATA:-/tmp/da-data}"]
+  timeout_seconds: 600
+  max_attempts: 3
+  retry_backoff_seconds: 1
+  concurrency: 4
+gateway:
+  followup_seconds: 0

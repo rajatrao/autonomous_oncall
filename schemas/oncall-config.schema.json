@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rajatrao/oncall/schemas/oncall-config/1",
+  "title": "On-call agent deployment configuration",
+  "description": "Customer configuration for the gateway and MCP servers. Changing this file never requires changing agent logic. String values may reference environment variables as ${VAR} or ${VAR:-default}; secrets must be referenced this way, never written inline.",
+  "type": "object",
+  "required": [
+    "config_version"
+  ],
+  "properties": {
+    "config_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "organization": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "incident": {
+      "type": "object",
+      "properties": {
+        "default_severity": {
+          "type": "string",
+          "enum": [
+            "SEV1",
+            "SEV2",
+            "SEV3",
+            "SEV4",
+            "SEV5"
+          ]
+        },
+        "default_environment": {
+          "type": "string"
+        },
+        "auto_close_after_recovery": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "type": "string",
+          "enum": [
+            "postgres",
+            "sqlite",
+            "memory"
+          ]
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ingestion": {
+      "type": "object",
+      "properties": {
+        "webhook": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "auth_token": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "queue": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "none",
+                "redis_streams"
+              ]
+            },
+            "url": {
+              "type": "string"
+            },
+            "stream": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            },
+            "consumer": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "runner": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "docker-agent-api",
+            "docker-agent-exec",
+            "none"
+          ]
+        },
+        "api_url": {
+          "type": "string"
+        },
+        "api_token": {
+          "type": "string"
+        },
+        "agent_id": {
+          "type": "string",
+          "description": "Agent identifier on the API server: the config filename without extension."
+        },
+        "agent_ref": {
+          "type": "string",
+          "description": "For docker-agent-exec: local file, OCI reference or alias."
+        },
+        "binary": {
+          "type": "string"
+        },
+        "flavors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "safety": {
+          "type": "string",
+          "enum": [
+            "restricted",
+            "balanced",
+            "strict",
+            "autonomous"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 10
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "wake_agent": {
+          "type": "string",
+          "description": "Named agent to run (default: the root agent)."
+        },
+        "extra_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra docker-agent run arguments for docker-agent-exec (for example --data-dir)."
+        },
+        "retry_backoff_seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "integrations": {
+      "type": "object",
+      "properties": {
+        "observability": {
+          "$ref": "#/$defs/provider"
+        },
+        "logs": {
+          "$ref": "#/$defs/provider"
+        },
+        "traces": {
+          "$ref": "#/$defs/provider"
+        },
+        "changes": {
+          "$ref": "#/$defs/provider"
+        },
+        "remediation": {
+          "$ref": "#/$defs/provider"
+        },
+        "communications": {
+          "$ref": "#/$defs/provider"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/provider"
+        },
+        "incident_management": {
+          "$ref": "#/$defs/provider"
+        }
+      },
+      "additionalProperties": false
+    },
+    "autonomy": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "supervised",
+            "autonomous"
+          ]
+        },
+        "investigation": {
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        },
+        "diagnosis": {
+          "type": "string",
+          "enum": [
+            "automatic"
+          ]
+        },
+        "remediation": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "automatic",
+                "approval_required",
+                "disabled"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "default": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "restart": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "rollback": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "scale": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "failover": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "circuit_breaker": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                },
+                "feature_flag": {
+                  "type": "string",
+                  "enum": [
+                    "automatic",
+                    "approval_required",
+                    "disabled"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "rollback": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string",
+              "enum": [
+                "automatic",
+                "approval_required",
+                "disabled"
+              ]
+            }
+          }
+        },
+        "failover": {
+          "type": "object",
+          "properties": {
+            "default": {
+              "type": "string",
+              "enum": [
+                "automatic",
+                "approval_required",
+                "disabled"
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "remediation": {
+      "type": "object",
+      "properties": {
+        "allowed_services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns of services the agent may act on."
+        },
+        "protected_services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Services that always require approval, whatever the autonomy mode."
+        },
+        "failover_targets": {
+          "type": "object",
+          "description": "Approved failover targets per dependency. Failover to anything else is denied.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "properties": {
+            "min_replicas": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_replicas": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "feature_flags": {
+          "type": "object",
+          "properties": {
+            "allowed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "max_actions_per_incident": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "mcp": {
+      "type": "object",
+      "description": "Per-server bearer tokens. Each MCP server only accepts its own token (least privilege).",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "auth_token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Incident gateway: HTTP API, approvals and the durable task worker.",
+      "properties": {
+        "api_token": {
+          "type": "string",
+          "description": "Bearer token for reading incidents. Empty disables auth (loopback/dev only)."
+        },
+        "approver_token": {
+          "type": "string",
+          "description": "Bearer token allowed to approve or reject remediation actions."
+        },
+        "cors_origins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "followup_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Re-wake open incidents that are waiting on evidence or recovery after this many idle seconds. 0 disables."
+        },
+        "max_followups": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "poll_interval_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "allow_reset": {
+          "type": "boolean",
+          "description": "Expose POST /v1/admin/reset (demo environments only)."
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "required": [
+        "provider"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

@@ -1,0 +1,94 @@
+# Reference demo configuration for the autonomous on-call product.
+# Everything environment-specific is here or in environment variables; the agent, skills and
+# MCP servers contain no demo names. Tokens come from the environment (see .env.example).
+config_version: "1"
+organization:
+  name: demo-payments
+incident:
+  default_severity: SEV2
+  default_environment: production
+state:
+  backend: postgres
+  url: "${ONCALL_STATE_URL}"
+ingestion:
+  webhook:
+    enabled: true
+    auth_token: "${ONCALL_INGEST_TOKEN}"
+  queue:
+    provider: redis_streams
+    url: "redis://redis:6379/0"
+    stream: oncall:events
+    group: oncall-gateway
+runner:
+  type: docker-agent-api
+  api_url: "http://docker-agent:8080"
+  api_token: "${ONCALL_AGENT_API_TOKEN}"
+  agent_id: auto
+  safety: restricted
+  timeout_seconds: 900
+  max_attempts: 3
+  retry_backoff_seconds: 10
+  concurrency: 4
+gateway:
+  api_token: "${ONCALL_GATEWAY_API_TOKEN}"
+  approver_token: "${ONCALL_GATEWAY_APPROVER_TOKEN}"
+  followup_seconds: 45
+  max_followups: 40
+  allow_reset: true
+integrations:
+  observability:
+    provider: prometheus
+    url: "http://prometheus:9090"
+    rate_window: 30s
+  logs:
+    provider: loki
+    url: "http://loki:3100"
+    selector: '{{service="{service}"}}'
+  traces:
+    provider: none
+  changes:
+    provider: http
+    url: "http://platform-control:8000"
+    token: "${PLATFORM_CHANGES_READ_TOKEN}"
+  remediation:
+    provider: http
+    url: "http://platform-control:8000"
+    token: "${PLATFORM_OPS_TOKEN}"
+  communications:
+    provider: slack
+    api_url: "http://slack-sim:8000/api"
+    token: "${SLACK_BOT_TOKEN}"
+    channel_name_template: "{incident_id}"
+  knowledge:
+    provider: filesystem
+    runbooks_dir: /config/runbooks
+    historical_incidents_file: /config/historical-incidents.yaml
+autonomy:
+  mode: "${ONCALL_AUTONOMY_MODE:-autonomous}"
+  investigation: automatic
+  diagnosis: automatic
+  remediation:
+    default: approval_required
+    failover: "${ONCALL_FAILOVER_MODE:-automatic}"
+    circuit_breaker: automatic
+    rollback: "${ONCALL_ROLLBACK_MODE:-approval_required}"
+    restart: approval_required
+    scale: approval_required
+    feature_flag: approval_required
+remediation:
+  allowed_services: [payment-api]
+  protected_services: [payments-db]
+  failover_targets:
+    bank-api-a: [bank-api-b]
+    bank-api-b: [bank-api-a]
+  scale: {min_replicas: 2, max_replicas: 8}
+  feature_flags: {allowed: [new-checkout-flow]}
+  max_actions_per_incident: 3
+  min_confidence: 0.8
+mcp:
+  incident_state: {auth_token: "${ONCALL_INCIDENT_STATE_MCP_TOKEN}"}
+  observability: {auth_token: "${ONCALL_OBSERVABILITY_MCP_TOKEN}"}
+  changes: {auth_token: "${ONCALL_CHANGES_MCP_TOKEN}"}
+  remediation: {auth_token: "${ONCALL_REMEDIATION_MCP_TOKEN}"}
+  communications: {auth_token: "${ONCALL_COMMUNICATIONS_MCP_TOKEN}"}
+  knowledge: {auth_token: "${ONCALL_KNOWLEDGE_MCP_TOKEN}"}

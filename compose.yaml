@@ -1,0 +1,251 @@
+# Reference demo: the on-call product (gateway, six MCP servers, Docker Agent) running against a
+# simulated payments platform. Only the services under "product" are the product; everything under
+# "demo" is a stand-in for your own systems and can be deleted.
+#
+#   ./scripts/demo.sh up            # generates .env with random tokens, then docker compose up -d
+#   ./scripts/demo.sh bank-outage   # or flaky-bank | bad-deployment | reset
+#
+# Tokens default to obviously-demo values so a bare `docker compose up` also works; they protect
+# nothing outside this compose project. All ports bind to 127.0.0.1.
+name: oncall-demo
+
+x-mcp: &mcp
+  build: {context: ., target: mcp, args: {PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.12-slim}"}}
+  image: autonomous-oncall/mcp:${ONCALL_VERSION:-0.1.0}
+  restart: unless-stopped
+  volumes: ["./demo/config:/config:ro"]
+  depends_on:
+    postgres: {condition: service_healthy}
+
+x-demo: &demo
+  build: {context: ./demo/app, args: {PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.12-slim}"}}
+  image: autonomous-oncall/demo:${ONCALL_VERSION:-0.1.0}
+  restart: unless-stopped
+
+x-mcp-env: &mcp-env
+  ONCALL_CONFIG: /config/oncall.yaml
+  ONCALL_MCP_ALLOWED_HOST: "*"
+  ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
+
+services:
+  # ------------------------------------------------------------------------------- product
+  gateway:
+    build: {context: ., target: gateway, args: {PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.12-slim}"}}
+    image: autonomous-oncall/gateway:${ONCALL_VERSION:-0.1.0}
+    restart: unless-stopped
+    ports: ["127.0.0.1:7100:7100"]
+    volumes: ["./demo/config:/config:ro"]
+    environment:
+      ONCALL_CONFIG: /config/oncall.yaml
+      ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
+      ONCALL_INGEST_TOKEN: ${ONCALL_INGEST_TOKEN:-demo-only-ingest}
+      ONCALL_GATEWAY_API_TOKEN: ${ONCALL_GATEWAY_API_TOKEN:-demo-only-read}
+      ONCALL_GATEWAY_APPROVER_TOKEN: ${ONCALL_GATEWAY_APPROVER_TOKEN:-demo-only-approver}
+      ONCALL_AGENT_API_TOKEN: ${ONCALL_AGENT_API_TOKEN:-demo-only-agent-api}
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+
+  docker-agent:
+    # Official Docker Agent image; serves the agent definition over its HTTP API.
+    # To run the published OCI artifact instead of the local file, set ONCALL_AGENT_REF to e.g.
+    # docker.io/<org>/oncall-agent:0.1.0 (see docs/getting-started.md).
+    image: docker/docker-agent:${DOCKER_AGENT_VERSION:-1.149.0}
+    restart: unless-stopped
+    command:
+      - serve
+      - api
+      - ${ONCALL_AGENT_REF:-/agent/oncall-agent.yaml}
+      - --listen=0.0.0.0:8080
+      - --auth-token=${ONCALL_AGENT_API_TOKEN:-demo-only-agent-api}
+      - --session-db=/tmp/session.db
+      - --flavor=${ONCALL_AGENT_FLAVOR:-scripted-model}
+    volumes: ["./dist:/agent:ro"]
+    environment:
+      TELEMETRY_ENABLED: "false"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ONCALL_SCRIPTED_MODEL_URL: http://scripted-model:7199/v1
+      ONCALL_SCRIPTED_MODEL_TOKEN: scripted
+      ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp
+      ONCALL_OBSERVABILITY_MCP_URL: http://mcp-observability:7102/mcp
+      ONCALL_CHANGES_MCP_URL: http://mcp-changes:7103/mcp
+      ONCALL_REMEDIATION_MCP_URL: http://mcp-remediation:7104/mcp
+      ONCALL_COMMUNICATIONS_MCP_URL: http://mcp-communications:7105/mcp
+      ONCALL_KNOWLEDGE_MCP_URL: http://mcp-knowledge:7106/mcp
+      ONCALL_INCIDENT_STATE_MCP_TOKEN: ${ONCALL_INCIDENT_STATE_MCP_TOKEN:-demo-only-mcp-state}
+      ONCALL_OBSERVABILITY_MCP_TOKEN: ${ONCALL_OBSERVABILITY_MCP_TOKEN:-demo-only-mcp-obs}
+      ONCALL_CHANGES_MCP_TOKEN: ${ONCALL_CHANGES_MCP_TOKEN:-demo-only-mcp-changes}
+      ONCALL_REMEDIATION_MCP_TOKEN: ${ONCALL_REMEDIATION_MCP_TOKEN:-demo-only-mcp-remediation}
+      ONCALL_COMMUNICATIONS_MCP_TOKEN: ${ONCALL_COMMUNICATIONS_MCP_TOKEN:-demo-only-mcp-comms}
+      ONCALL_KNOWLEDGE_MCP_TOKEN: ${ONCALL_KNOWLEDGE_MCP_TOKEN:-demo-only-mcp-knowledge}
+
+  # Each capability server gets only its own token and only the backend credential it needs.
+  mcp-incident-state:
+    <<: *mcp
+    command: [incident_state, --port, "7101"]
+    environment:
+      <<: *mcp-env
+      ONCALL_INCIDENT_STATE_MCP_TOKEN: ${ONCALL_INCIDENT_STATE_MCP_TOKEN:-demo-only-mcp-state}
+  mcp-observability:
+    <<: *mcp
+    command: [observability, --port, "7102"]
+    environment:
+      <<: *mcp-env
+      ONCALL_OBSERVABILITY_MCP_TOKEN: ${ONCALL_OBSERVABILITY_MCP_TOKEN:-demo-only-mcp-obs}
+  mcp-changes:
+    <<: *mcp
+    command: [changes, --port, "7103"]
+    environment:
+      <<: *mcp-env
+      ONCALL_CHANGES_MCP_TOKEN: ${ONCALL_CHANGES_MCP_TOKEN:-demo-only-mcp-changes}
+      PLATFORM_CHANGES_READ_TOKEN: ${PLATFORM_CHANGES_READ_TOKEN:-demo-only-changes-read}
+  mcp-remediation:
+    <<: *mcp
+    command: [remediation, --port, "7104"]
+    environment:
+      <<: *mcp-env
+      ONCALL_REMEDIATION_MCP_TOKEN: ${ONCALL_REMEDIATION_MCP_TOKEN:-demo-only-mcp-remediation}
+      PLATFORM_OPS_TOKEN: ${PLATFORM_OPS_TOKEN:-demo-only-ops}
+      ONCALL_AUTONOMY_MODE: ${ONCALL_AUTONOMY_MODE:-autonomous}
+      ONCALL_FAILOVER_MODE: ${ONCALL_FAILOVER_MODE:-automatic}
+      ONCALL_ROLLBACK_MODE: ${ONCALL_ROLLBACK_MODE:-approval_required}
+  mcp-communications:
+    <<: *mcp
+    command: [communications, --port, "7105"]
+    environment:
+      <<: *mcp-env
+      ONCALL_COMMUNICATIONS_MCP_TOKEN: ${ONCALL_COMMUNICATIONS_MCP_TOKEN:-demo-only-mcp-comms}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-xoxb-demo-only}
+  mcp-knowledge:
+    <<: *mcp
+    command: [knowledge, --port, "7106"]
+    environment:
+      <<: *mcp-env
+      ONCALL_KNOWLEDGE_MCP_TOKEN: ${ONCALL_KNOWLEDGE_MCP_TOKEN:-demo-only-mcp-knowledge}
+
+  scripted-model:
+    # Deterministic stand-in for an LLM so the demo and CI run without an API key.
+    # Unused when ONCALL_AGENT_FLAVOR=live (the agent then uses its configured Anthropic models).
+    build: {context: ., target: scripted-model, args: {PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.12-slim}"}}
+    image: autonomous-oncall/scripted-model:${ONCALL_VERSION:-0.1.0}
+    restart: unless-stopped
+    environment:
+      ONCALL_SCRIPTED_SETTLE_SECONDS: "240"
+
+  # ---------------------------------------------------------------------------------- demo
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-only-postgres}
+      ONCALL_DB_PASSWORD: ${ONCALL_DB_PASSWORD:-demo-only-oncall-db}
+      PAYMENTS_DB_PASSWORD: ${PAYMENTS_DB_PASSWORD:-demo-only-payments-db}
+    volumes:
+      - ./demo/config/postgres-init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oncall"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    # The admin API lets `demo.sh reset` wipe demo metrics so scenarios do not see each other's history.
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=1d, --web.enable-admin-api]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes: ["./demo/config/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+
+  loki:
+    image: grafana/loki:3.5.3
+    restart: unless-stopped
+    command: [-config.file=/etc/loki/loki.yaml]
+    ports: ["127.0.0.1:3100:3100"]
+    volumes: ["./demo/config/loki.yaml:/etc/loki/loki.yaml:ro"]
+
+  payment-api:
+    <<: *demo
+    command: [uvicorn, payment_api:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    environment:
+      SERVICE_NAME: payment-api
+      REDIS_URL: redis://redis:6379/0
+      LOKI_URL: http://loki:3100
+      BANKS: bank-api-a=http://bank-api-a:8000,bank-api-b=http://bank-api-b:8000
+      FRAUD_URL: http://fraud-api:8000
+      PAYMENTS_DB_URL: postgresql://payments:${PAYMENTS_DB_PASSWORD:-demo-only-payments-db}@postgres:5432/payments
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  bank-api-a: &bank
+    <<: *demo
+    command: [uvicorn, bank_api:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    environment: {SERVICE_NAME: bank-api-a, REDIS_URL: "redis://redis:6379/0", LOKI_URL: "http://loki:3100"}
+  bank-api-b:
+    <<: *bank
+    environment: {SERVICE_NAME: bank-api-b, REDIS_URL: "redis://redis:6379/0", LOKI_URL: "http://loki:3100"}
+  fraud-api:
+    <<: *bank
+    environment: {SERVICE_NAME: fraud-api, REDIS_URL: "redis://redis:6379/0", LOKI_URL: "http://loki:3100"}
+
+  platform-control:
+    <<: *demo
+    command: [uvicorn, platform_control:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    environment:
+      SERVICE_NAME: platform-control
+      REDIS_URL: redis://redis:6379/0
+      LOKI_URL: http://loki:3100
+      CHANGES_READ_TOKEN: ${PLATFORM_CHANGES_READ_TOKEN:-demo-only-changes-read}
+      OPS_TOKEN: ${PLATFORM_OPS_TOKEN:-demo-only-ops}
+      DEPLOY_TOKEN: ${PLATFORM_DEPLOY_TOKEN:-demo-only-deploy}
+
+  chaos-controller:
+    <<: *demo
+    command: [uvicorn, chaos_controller:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    ports: ["127.0.0.1:8060:8000"]
+    environment:
+      SERVICE_NAME: chaos-controller
+      REDIS_URL: redis://redis:6379/0
+      CHAOS_TOKEN: ${CHAOS_TOKEN:-demo-only-chaos}
+      DEPLOY_TOKEN: ${PLATFORM_DEPLOY_TOKEN:-demo-only-deploy}
+      GATEWAY_ADMIN_TOKEN: ${ONCALL_GATEWAY_APPROVER_TOKEN:-demo-only-approver}
+      PROMETHEUS_URL: http://prometheus:9090
+      FLAKY_PHASE_SECONDS: "60"
+
+  traffic-generator:
+    <<: *demo
+    command: [python, traffic_generator.py]
+    environment: {TARGET_URL: "http://payment-api:8000/v1/payments", RPS: "8"}
+
+  alert-evaluator:
+    <<: *demo
+    command: [python, alert_evaluator.py]
+    environment:
+      SERVICE_NAME: alert-evaluator
+      REDIS_URL: redis://redis:6379/0
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERT_SINK: redis
+      FIRE_THRESHOLD: "0.08"
+      RESOLVE_THRESHOLD: "0.01"
+      RESOLVE_FOR: "60"
+
+  slack-sim:
+    <<: *demo
+    command: [uvicorn, slack_sim:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    ports: ["127.0.0.1:8070:8000"]
+    environment: {SERVICE_NAME: slack-sim}
+
+  dashboard:
+    <<: *demo
+    command: [uvicorn, dashboard:app, --host, 0.0.0.0, --port, "8000", --log-level, warning]
+    ports: ["127.0.0.1:3000:8000"]
+    environment:
+      GATEWAY_API_TOKEN: ${ONCALL_GATEWAY_API_TOKEN:-demo-only-read}
+      GATEWAY_APPROVER_TOKEN: ${ONCALL_GATEWAY_APPROVER_TOKEN:-demo-only-approver}
+      CHAOS_TOKEN: ${CHAOS_TOKEN:-demo-only-chaos}
+
+volumes:
+  pgdata:

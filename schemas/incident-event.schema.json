@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rajatrao/oncall/schemas/incident-event/1.0",
+  "title": "Incident Event",
+  "description": "Vendor-neutral incident event consumed by the on-call agent. Version 1.x is additive only: new optional fields may appear in minor versions and consumers MUST ignore fields they do not understand. A change to the meaning or requiredness of an existing field requires a new major version.",
+  "type": "object",
+  "required": ["version", "event_type", "event_id", "timestamp", "incident"],
+  "properties": {
+    "version": {
+      "description": "Schema version as MAJOR.MINOR. Consumers accept any minor version of a major they support.",
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": ["1.0"]
+    },
+    "event_type": {
+      "description": "Lifecycle event kind.",
+      "type": "string",
+      "enum": [
+        "incident.created",
+        "incident.updated",
+        "incident.recovery_detected",
+        "incident.closed"
+      ]
+    },
+    "event_id": {
+      "description": "Globally unique id for this event. Re-delivery of the same event MUST reuse the same id; it is the primary de-duplication key.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "idempotency_key": {
+      "description": "Optional producer-supplied key. When present it is used instead of event_id for de-duplication, so a producer can collapse logically identical events that were assigned different ids.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "timestamp": {
+      "description": "When the producer observed the condition (RFC 3339).",
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "description": "Who produced the event. Informational.",
+      "type": "object",
+      "properties": {
+        "system": {"type": "string", "examples": ["alertmanager", "pagerduty", "datadog", "alert-evaluator"]},
+        "integration": {"type": "string"},
+        "url": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "incident": {
+      "type": "object",
+      "required": ["id", "severity", "service", "summary"],
+      "properties": {
+        "id": {
+          "description": "Stable incident identifier. All events about the same incident MUST carry the same id.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "severity": {
+          "description": "Producer's view of severity. Triage may revise it.",
+          "type": "string",
+          "enum": ["SEV1", "SEV2", "SEV3", "SEV4", "SEV5"]
+        },
+        "service": {"description": "Primary service the signal was observed on.", "type": "string", "minLength": 1},
+        "environment": {"type": "string", "default": "production"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "labels": {
+          "description": "Free-form key/value labels copied from the source alert.",
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "additionalProperties": true
+    },
+    "signals": {
+      "description": "Measurements that triggered or updated the incident.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": {"type": "string"},
+          "value": {"type": "number"},
+          "unit": {"type": "string", "examples": ["ratio", "ms", "rps", "count"]},
+          "window": {"type": "string", "examples": ["1m", "5m"]},
+          "threshold": {"type": "number"},
+          "labels": {"type": "object", "additionalProperties": {"type": "string"}}
+        },
+        "additionalProperties": true
+      }
+    },
+    "links": {
+      "description": "Deep links for humans (dashboards, logs, runbooks).",
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "metadata": {
+      "description": "Producer-specific data. Never interpreted by the core agent.",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

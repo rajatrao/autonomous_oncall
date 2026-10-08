@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rajatrao/oncall/schemas/agent-task/1.0",
+  "title": "Agent Task",
+  "description": "A durable unit of agent work. The gateway persists one task per agent wake-up (and agents record their own sub-tasks) so a crashed or timed-out agent run is retried instead of losing the incident.",
+  "type": "object",
+  "required": ["task_id", "incident_id", "agent", "status", "attempt"],
+  "properties": {
+    "task_id": {"type": "string"},
+    "incident_id": {"type": "string"},
+    "agent": {"type": "string", "description": "Logical agent name, e.g. incident_commander, triage, diagnostics."},
+    "kind": {"type": "string", "description": "wake | subtask"},
+    "status": {"type": "string", "enum": ["pending", "running", "succeeded", "failed", "dead_letter"]},
+    "attempt": {"type": "integer", "minimum": 0},
+    "max_attempts": {"type": "integer", "minimum": 1},
+    "idempotency_key": {"type": "string"},
+    "input": {"type": "object"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"},
+    "next_attempt_at": {"type": ["string", "null"], "format": "date-time"},
+    "result": {"type": ["object", "string", "null"]},
+    "error": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

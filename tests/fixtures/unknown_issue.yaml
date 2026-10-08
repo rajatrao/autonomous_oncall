@@ -1,0 +1,22 @@
+# Elevated errors with no dependency, change or log signal pointing anywhere.
+service_health:
+  checkout-api:
+    status: degraded
+    signals:
+      error_rate: {current: 0.09, peak: 0.11, baseline: 0.004, shape: sustained, threshold: 0.05}
+dependency_health:
+  checkout-api:
+    - dependency: geo-provider-a
+      status: healthy
+      error_rate: {current: 0.002, peak: 0.004, baseline: 0.002, shape: normal}
+error_signatures:
+  checkout-api: []
+deployments:
+  checkout-api: []
+config_changes:
+  checkout-api: []
+feature_flag_changes:
+  checkout-api: []
+capabilities:
+  checkout-api:
+    operations: [restart_service]

@@ -1,0 +1,124 @@
+# Annotated configuration for the gateway and the MCP servers.
+#
+# Validated against schemas/oncall-config.schema.json at start-up. ${VAR} and ${VAR:-default} are
+# expanded from the environment first, so keep every secret in the environment (or your secret
+# manager's injection), never in this file. See docs/configuration.md.
+config_version: "1"
+
+organization:
+  name: example-org                 # informational; shows up in RCAs and audit records
+
+incident:
+  default_severity: SEV2            # when the source gives none
+  default_environment: production
+
+# Durable incident state: incidents, events, tasks, actions, RCA and the audit log.
+state:
+  backend: postgres                 # postgres (production) | sqlite (single node) | memory (tests)
+  url: ${ONCALL_STATE_URL}          # postgresql://oncall:...@db/oncall  or  sqlite:////data/oncall.db
+
+ingestion:
+  webhook:
+    enabled: true                   # POST /v1/events and /v1/adapters/{alertmanager,pagerduty}
+    auth_token: ${ONCALL_INGEST_TOKEN}
+  queue:
+    provider: none                  # none | redis_streams
+    # url: ${ONCALL_QUEUE_URL}
+    # stream: oncall:events
+    # group: oncall-gateway
+
+# How the gateway wakes the agent for an incident.
+runner:
+  type: docker-agent-api            # docker-agent-api | docker-agent-exec | none (store only)
+  api_url: http://docker-agent:8080 # `docker agent serve api <ref> --auth-token ...`
+  api_token: ${ONCALL_AGENT_API_TOKEN}
+  agent_id: auto                    # auto = ask the server; else the agent file name without .yaml
+  safety: restricted                # Docker Agent safety policy; restricted fails closed
+  timeout_seconds: 900
+  max_attempts: 3                   # then the task is dead-lettered and visible in /v1/tasks
+  retry_backoff_seconds: 10         # exponential
+  concurrency: 4                    # incidents handled at the same time (one run per incident)
+  # For docker-agent-exec instead:
+  # binary: docker agent
+  # agent_ref: docker.io/<org>/oncall-agent:0.1.0
+
+gateway:
+  api_token: ${ONCALL_GATEWAY_API_TOKEN}            # read incidents, RCA, audit
+  approver_token: ${ONCALL_GATEWAY_APPROVER_TOKEN}  # approve or reject actions; give to fewer people
+  followup_seconds: 120             # re-wake incidents waiting on evidence or recovery; 0 disables
+  max_followups: 30
+  cors_origins: []
+  allow_reset: false                # never true outside a demo
+
+# One provider per capability. Credentials are referenced, not stored.
+integrations:
+  observability:
+    provider: prometheus            # prometheus | mock | none
+    url: https://prometheus.internal
+    bearer_token: ${PROMETHEUS_TOKEN:-}
+    rate_window: 1m
+    # queries:                      # override with your metric names (literal braces doubled)
+    #   error_rate: 'sum(rate(http_requests_total{{job="{service}",code=~"5.."}}[{window}])) / sum(rate(http_requests_total{{job="{service}"}}[{window}]))'
+    # thresholds: {error_rate: 0.05, dependency_error_rate: 0.05, latency_p95_ms: 1000}
+  logs:
+    provider: loki                  # loki | mock | none
+    url: https://loki.internal
+    selector: '{{app="{service}"}}'
+    # tenant: my-tenant             # X-Scope-OrgID
+  traces:
+    provider: none                  # query_traces reports "unavailable"
+  changes:
+    provider: http                  # http (generic contract, docs/integrations.md) | github | mock | none
+    url: https://deployments.internal
+    token: ${CHANGES_READ_TOKEN}    # read-only
+    # provider: github
+    # token: ${GITHUB_DEPLOYMENTS_READ_TOKEN}
+    # repos: {checkout-api: my-org/checkout}
+  remediation:
+    provider: dry-run               # start here; then http (ops contract) or kubernetes (experimental)
+    # provider: http
+    # url: https://ops.internal
+    # token: ${OPS_API_TOKEN}       # only the remediation MCP server receives this
+  communications:
+    provider: log                   # log | slack | webhook
+    # provider: slack
+    # token: ${SLACK_BOT_TOKEN}     # scopes: channels:manage, chat:write
+    # channel_name_template: "inc-{incident_id}"
+    # fallback_channel: C0123456789
+  knowledge:
+    provider: filesystem
+    runbooks_dir: /config/runbooks  # markdown with frontmatter: title, services, tags
+    # historical_incidents_file: /config/historical-incidents.yaml
+
+# What the agent may change on its own. Start with read-only.
+autonomy:
+  mode: read-only                   # read-only | supervised | autonomous
+  investigation: automatic
+  diagnosis: automatic
+  remediation:                      # only used in autonomous mode
+    default: approval_required      # automatic | approval_required | disabled
+    failover: approval_required
+    circuit_breaker: approval_required
+    rollback: approval_required
+    restart: approval_required
+    scale: approval_required
+    feature_flag: approval_required
+
+# Hard guardrails, applied in every mode by the remediation server's policy engine.
+remediation:
+  allowed_services: []              # glob patterns, e.g. ["checkout-*"]; empty = nothing
+  protected_services: []            # always need approval
+  failover_targets: {}              # e.g. {payments-provider-a: [payments-provider-b]}
+  scale: {min_replicas: 2, max_replicas: 10}
+  feature_flags: {allowed: []}
+  max_actions_per_incident: 3
+  min_confidence: 0.8               # below this, automatic becomes approval_required
+
+# One bearer token per MCP server. The agent gets each through ONCALL_<GROUP>_MCP_TOKEN.
+mcp:
+  incident_state: {auth_token: "${ONCALL_INCIDENT_STATE_MCP_TOKEN}"}
+  observability: {auth_token: "${ONCALL_OBSERVABILITY_MCP_TOKEN}"}
+  changes: {auth_token: "${ONCALL_CHANGES_MCP_TOKEN}"}
+  remediation: {auth_token: "${ONCALL_REMEDIATION_MCP_TOKEN}"}
+  communications: {auth_token: "${ONCALL_COMMUNICATIONS_MCP_TOKEN}"}
+  knowledge: {auth_token: "${ONCALL_KNOWLEDGE_MCP_TOKEN}"}

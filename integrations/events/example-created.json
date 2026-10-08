@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "event_type": "incident.created",
+  "event_id": "example-0001",
+  "timestamp": "2026-10-08T14:02:11Z",
+  "source": {"system": "example"},
+  "incident": {
+    "id": "INC-EXAMPLE-1",
+    "severity": "SEV2",
+    "service": "checkout-api",
+    "summary": "checkout-api error rate 12% (threshold 5%)"
+  },
+  "signals": [{"name": "error_rate", "value": 0.12, "unit": "ratio", "window": "5m", "threshold": 0.05}]
+}

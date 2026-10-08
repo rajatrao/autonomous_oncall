@@ -1,0 +1,345 @@
+# Source for the on-call agent's Docker Agent configuration.
+#
+# `scripts/build.sh` renders this file into dist/oncall-agent.yaml by replacing
+#   "@include <path>"  with the contents of agent/<path>
+#   "@skill <name>"    with an inline skill built from agent/skills/<name>/SKILL.md
+# The rendered file is a single self-contained Docker Agent config, which is what
+# `docker agent share push` publishes as an OCI artifact (the artifact carries the
+# YAML only, so prompts and skills are inlined rather than referenced as files).
+#
+# Nothing in this file is specific to a customer, vendor or the demo environment.
+# Integration endpoints come from environment variables at run time.
+
+version: "16"
+
+metadata:
+  author: autonomous-oncall contributors
+  license: Apache-2.0
+  description: Autonomous, vendor-neutral production on-call incident response team
+  readme: "@include README.oci.md"
+  version: "@version"
+  tags: [oncall, incident-response, sre, mcp]
+
+models:
+  reasoning:
+    provider: anthropic
+    model: claude-sonnet-5-5
+    max_tokens: 16000
+  fast:
+    provider: anthropic
+    model: claude-haiku-5-5
+    max_tokens: 8000
+
+# MCP capability groups. Each is a separate remote (streamable HTTP) MCP server with its own
+# least-privilege token, so customers can host, scale and secure them independently and swap
+# implementations (Prometheus vs Datadog, Slack vs Teams...) without touching this file.
+# They are self-hosted inside the customer's network, hence allow_private_ips: true (Docker Agent
+# otherwise refuses to dial private or loopback addresses for remote MCP servers).
+mcps:
+  incident_state:
+    remote:
+      url: "${env.ONCALL_INCIDENT_STATE_MCP_URL || 'http://localhost:7101/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_INCIDENT_STATE_MCP_TOKEN}"
+    allow_private_ips: true
+  observability:
+    remote:
+      url: "${env.ONCALL_OBSERVABILITY_MCP_URL || 'http://localhost:7102/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_OBSERVABILITY_MCP_TOKEN}"
+    allow_private_ips: true
+  changes:
+    remote:
+      url: "${env.ONCALL_CHANGES_MCP_URL || 'http://localhost:7103/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_CHANGES_MCP_TOKEN}"
+    allow_private_ips: true
+  remediation:
+    remote:
+      url: "${env.ONCALL_REMEDIATION_MCP_URL || 'http://localhost:7104/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_REMEDIATION_MCP_TOKEN}"
+    allow_private_ips: true
+  communications:
+    remote:
+      url: "${env.ONCALL_COMMUNICATIONS_MCP_URL || 'http://localhost:7105/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_COMMUNICATIONS_MCP_TOKEN}"
+    allow_private_ips: true
+  knowledge:
+    remote:
+      url: "${env.ONCALL_KNOWLEDGE_MCP_URL || 'http://localhost:7106/mcp'}"
+      transport_type: streamable
+      headers:
+        Authorization: "Bearer ${env.ONCALL_KNOWLEDGE_MCP_TOKEN}"
+    allow_private_ips: true
+
+agents:
+  root:
+    model: reasoning
+    description: Incident Commander - owns the incident lifecycle and delegates to specialists
+    add_date: true
+    max_iterations: 60
+    redact_secrets: true
+    instruction: "@include agents/incident-commander/instruction.md"
+    sub_agents: [triage, diagnostics, remediation, communications, rca]
+    toolsets:
+      - type: background_agents
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident, list_open_incidents, update_incident_status, record_triage, record_hypotheses,
+                set_root_cause, append_timeline, record_agent_task, get_incident_tasks]
+
+  triage:
+    model: reasoning
+    description: Determines severity, scope, impact, affected services and dependencies
+    add_date: true
+    max_iterations: 20
+    redact_secrets: true
+    instruction: "@include agents/triage/instruction.md"
+    skills: ["@skill incident-triage", "@skill metrics-analysis"]
+    toolsets:
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident]
+      - type: mcp
+        ref: observability
+        tools: [get_service_health, get_dependency_health, query_metrics]
+    structured_output:
+      mode: tool
+      name: triage_result
+      description: Structured triage of the incident
+      schema:
+        type: object
+        required: [severity, scope, impact, affected_services, affected_dependencies, initial_symptoms, confidence]
+        properties:
+          severity: {type: string, enum: [SEV1, SEV2, SEV3, SEV4, SEV5]}
+          severity_reason: {type: string}
+          scope: {type: string}
+          impact: {type: string}
+          affected_services: {type: array, items: {type: string}}
+          affected_dependencies: {type: array, items: {type: string}}
+          initial_symptoms: {type: array, items: {type: string}}
+          confidence: {type: number, minimum: 0, maximum: 1}
+          notes: {type: string}
+
+  diagnostics:
+    model: reasoning
+    description: Investigates metrics, logs, changes, dependencies and history; returns evidence-backed hypotheses
+    add_date: true
+    max_iterations: 30
+    redact_secrets: true
+    instruction: "@include agents/diagnostics/instruction.md"
+    skills: ["@skill root-cause-analysis", "@skill deployment-analysis", "@skill dependency-analysis"]
+    sub_agents: [metrics_investigator, logs_investigator, change_investigator, dependency_investigator, history_investigator]
+    toolsets:
+      - type: background_agents
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident]
+    structured_output:
+      mode: tool
+      name: diagnosis
+      description: Root cause hypothesis with evidence and calibrated confidence
+      schema:
+        type: object
+        required: [hypothesis, confidence, evidence, alternative_hypotheses, category, next_steps]
+        properties:
+          hypothesis: {type: string}
+          confidence: {type: number, minimum: 0, maximum: 1}
+          category:
+            type: string
+            enum: [dependency_degradation, intermittent_dependency_degradation, bad_deployment, config_change,
+                   feature_flag, resource_exhaustion, unknown]
+          suspect: {type: string, description: "The component, dependency, version or flag implicated"}
+          evidence: {type: array, items: {type: string}}
+          alternative_hypotheses:
+            type: array
+            items:
+              type: object
+              required: [hypothesis, confidence]
+              properties:
+                hypothesis: {type: string}
+                confidence: {type: number, minimum: 0, maximum: 1}
+                why_not_ruled_out: {type: string}
+          next_steps: {type: array, items: {type: string}}
+
+  metrics_investigator:
+    model: fast
+    description: Characterizes the anomaly in metrics (onset, shape, concentration by label)
+    max_iterations: 12
+    instruction: "@include agents/investigators/metrics.md"
+    skills: ["@skill metrics-analysis"]
+    toolsets:
+      - type: mcp
+        ref: observability
+        tools: [get_service_health, query_metrics, get_dependency_health]
+
+  logs_investigator:
+    model: fast
+    description: Finds new or increased error signatures in logs
+    max_iterations: 12
+    redact_secrets: true
+    instruction: "@include agents/investigators/logs.md"
+    skills: ["@skill log-analysis"]
+    toolsets:
+      - type: mcp
+        ref: observability
+        tools: [get_error_signatures, query_logs, query_traces]
+
+  change_investigator:
+    model: fast
+    description: Finds recent deployments, configuration and feature flag changes
+    max_iterations: 12
+    instruction: "@include agents/investigators/changes.md"
+    skills: ["@skill deployment-analysis"]
+    toolsets:
+      - type: mcp
+        ref: changes
+        tools: [get_recent_deployments, get_recent_config_changes, get_recent_feature_flag_changes]
+
+  dependency_investigator:
+    model: fast
+    description: Evaluates the health of the service's dependencies and their alternates
+    max_iterations: 12
+    instruction: "@include agents/investigators/dependencies.md"
+    skills: ["@skill dependency-analysis"]
+    toolsets:
+      - type: mcp
+        ref: observability
+        tools: [get_dependency_health, get_service_health]
+
+  history_investigator:
+    model: fast
+    description: Searches runbooks and historical incidents
+    max_iterations: 12
+    instruction: "@include agents/investigators/history.md"
+    toolsets:
+      - type: mcp
+        ref: knowledge
+        tools: [search_runbooks, get_runbook, search_historical_incidents]
+
+  remediation:
+    model: reasoning
+    description: Chooses the safest typed mitigation, requests it through policy-checked tools, and verifies recovery
+    add_date: true
+    max_iterations: 20
+    redact_secrets: true
+    instruction: "@include agents/remediation/instruction.md"
+    skills: ["@skill safe-remediation", "@skill dependency-analysis", "@skill deployment-analysis"]
+    toolsets:
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident]
+      - type: mcp
+        ref: remediation
+        tools: [list_remediation_capabilities, get_remediation_status, execute_approved_action, restart_service, rollback_deployment,
+                scale_service, failover_dependency, enable_circuit_breaker, disable_feature_flag]
+      - type: mcp
+        ref: knowledge
+        tools: [search_runbooks, get_runbook]
+      - type: mcp
+        ref: observability
+        tools: [get_service_health, get_dependency_health, query_metrics, get_error_signatures]
+
+  communications:
+    model: fast
+    description: Posts stakeholder updates; keeps working when the chat provider is down
+    max_iterations: 12
+    redact_secrets: true
+    instruction: "@include agents/communications/instruction.md"
+    skills: ["@skill incident-communications"]
+    toolsets:
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident]
+      - type: mcp
+        ref: communications
+        tools: [create_incident_channel, post_incident_update, update_incident_channel]
+
+  rca:
+    model: reasoning
+    description: Maintains the root cause analysis document throughout the incident
+    max_iterations: 20
+    redact_secrets: true
+    instruction: "@include agents/rca/instruction.md"
+    skills: ["@skill rca-generation", "@skill post-incident-review"]
+    toolsets:
+      - type: mcp
+        ref: incident_state
+        tools: [get_incident]
+      - type: mcp
+        ref: knowledge
+        tools: [create_rca, append_rca_timeline, update_rca_section, finalize_rca, get_rca,
+                search_historical_incidents]
+
+# Defense in depth (client-side). The authoritative remediation gate is the remediation MCP
+# server's policy engine, which is server-side and cannot be bypassed by the model.
+permissions:
+  deny:
+    - "shell"
+    - "shell:*"
+    - "run_background_job"
+    - "write_file"
+    - "edit_file"
+  allow:
+    - "transfer_task"
+    - "run_background_agent"
+    - "list_background_agents"
+    - "view_background_agent"
+    - "wait_background_agents"
+    - "stop_background_agent"
+    - "read_skill"
+    - "run_skill"
+    - "__structured_output__"
+    - "get_*"
+    - "list_*"
+    - "query_*"
+    - "search_*"
+    - "update_incident_status"
+    - "record_triage"
+    - "record_hypotheses"
+    - "set_root_cause"
+    - "append_timeline"
+    - "record_agent_task"
+    - "create_incident_channel"
+    - "post_incident_update"
+    - "update_incident_channel"
+    - "create_rca"
+    - "append_rca_timeline"
+    - "update_rca_section"
+    - "finalize_rca"
+    - "execute_approved_action"
+    - "restart_service"
+    - "rollback_deployment"
+    - "scale_service"
+    - "failover_dependency"
+    - "enable_circuit_breaker"
+    - "disable_feature_flag"
+
+# Unattended by design: anything not explicitly allowed above is denied without prompting.
+runtime:
+  safety: restricted
+
+flavors:
+  # Replaces the LLM with the deterministic scripted model in src/oncall_testing. Used by CI and
+  # by the keyless demo. The agents, prompts, tools and policies stay exactly the same.
+  scripted-model:
+    models:
+      reasoning:
+        provider: openai
+        model: scripted-oncall
+        base_url: "${env.ONCALL_SCRIPTED_MODEL_URL}"
+        token_key: ONCALL_SCRIPTED_MODEL_TOKEN
+        max_tokens: 4000
+      fast:
+        provider: openai
+        model: scripted-oncall
+        base_url: "${env.ONCALL_SCRIPTED_MODEL_URL}"
+        token_key: ONCALL_SCRIPTED_MODEL_TOKEN
+        max_tokens: 4000

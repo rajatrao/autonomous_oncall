@@ -1,0 +1,30 @@
+service_health:
+  checkout-api:
+    status: degraded
+    signals:
+      error_rate: {current: 0.03, peak: 0.31, baseline: 0.004, shape: intermittent, threshold: 0.05, threshold_crossings: 3, bursts: 2}
+dependency_health:
+  checkout-api:
+    - dependency: geo-provider-a
+      status: degraded
+      error_rate: {current: 0.02, peak: 0.31, baseline: 0.002, shape: intermittent, threshold_crossings: 3, bursts: 2}
+    - dependency: geo-provider-b
+      status: healthy
+      error_rate: {current: 0.0, peak: 0.01, baseline: 0.0, shape: normal}
+error_signatures:
+  checkout-api:
+    - signature: "upstream geo-provider-a timed out after <n>ms"
+      count: 61
+      baseline_count: 2
+      new: false
+      increase_factor: 30.5
+      context: {dependency: geo-provider-a}
+deployments:
+  checkout-api: []
+config_changes:
+  checkout-api: []
+feature_flag_changes:
+  checkout-api: []
+capabilities:
+  checkout-api:
+    operations: [failover_dependency]

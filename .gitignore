@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+*.db
+*.db-shm
+*.db-wal
+tests/fixtures/*.applied.json
+session.db

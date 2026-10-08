@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>On-call Demo</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171d24; --line: #263040; --text: #e6edf3; --muted: #8b98a8;
+    --accent: #4aa3ff; --ok: #3fb950; --warn: #d29922; --bad: #f85149; --chip: #1f2833;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f6f8fa; --panel: #ffffff; --line: #d8dee4; --text: #1f2328; --muted: #59636e;
+      --accent: #0969da; --ok: #1a7f37; --warn: #9a6700; --bad: #cf222e; --chip: #eef1f4;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+           padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 16px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  button { background: var(--chip); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+           padding: 6px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.danger { border-color: var(--bad); color: var(--bad); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  main { display: grid; grid-template-columns: 320px 1fr; gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; min-width: 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .inc { padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .inc:hover, .inc.sel { border-color: var(--accent); background: var(--chip); }
+  .inc .id { font-weight: 600; }
+  .muted { color: var(--muted); }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 10px; background: var(--chip); font-size: 12px; border: 1px solid var(--line); }
+  .s-CLOSED, .s-RECOVERED, .ok { color: var(--ok); }
+  .s-REMEDIATION_PROPOSED, .warn { color: var(--warn); }
+  .s-DETECTED, .s-TRIAGING, .s-INVESTIGATING, .s-ROOT_CAUSE_IDENTIFIED, .s-REMEDIATING, .s-VERIFYING { color: var(--accent); }
+  .bad { color: var(--bad); }
+  .steps { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 4px; }
+  .step { font-size: 11px; padding: 3px 6px; border-radius: 4px; background: var(--chip); color: var(--muted); }
+  .step.done { color: var(--ok); }
+  .step.cur { background: var(--accent); color: #fff; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 1200px) { .grid2 { grid-template-columns: 1fr; } }
+  .tl { max-height: 420px; overflow: auto; font-size: 13px; }
+  .tl div { padding: 4px 0; border-bottom: 1px dashed var(--line); }
+  .tl .at { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .tl .actor { color: var(--accent); margin-right: 6px; }
+  .action { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+  .msg { border-left: 3px solid var(--accent); padding: 4px 8px; margin: 6px 0; white-space: pre-wrap; font-size: 13px; }
+  .rca h3 { font-size: 13px; margin: 10px 0 2px; }
+  .rca p { margin: 0; white-space: pre-wrap; font-size: 13px; }
+  svg { width: 100%; height: 70px; display: block; }
+  .legend { font-size: 12px; color: var(--muted); }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  code { font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Autonomous on-call: reference demo</h1>
+    <div class="sub">payment-api with two banks and a fraud provider. Start a scenario and watch the agent work.</div>
+  </div>
+  <div class="row">
+    <button onclick="scenario('bank-outage')">Bank outage</button>
+    <button onclick="scenario('flaky-bank')">Flaky bank</button>
+    <button onclick="scenario('bad-deployment')">Bad deployment</button>
+    <button class="danger" onclick="scenario('reset')">Reset</button>
+    <span id="active" class="chip">no scenario</span>
+  </div>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2>payment-api error rate (1m)</h2>
+      <svg id="err" viewBox="0 0 300 70" preserveAspectRatio="none"></svg>
+      <div class="legend" id="errnow"></div>
+    </div>
+    <div class="panel">
+      <h2>Dependency error rate (1m)</h2>
+      <div id="deps" class="legend"></div>
+    </div>
+    <div class="panel">
+      <h2>Incidents</h2>
+      <div id="incidents"><div class="empty">No incidents yet</div></div>
+    </div>
+  </section>
+  <section id="detail"><div class="panel empty">Select an incident</div></section>
+</main>
+<script>
+const STEPS = ["DETECTED","TRIAGING","INVESTIGATING","ROOT_CAUSE_IDENTIFIED","REMEDIATION_PROPOSED","REMEDIATING","VERIFYING","RECOVERED","CLOSED"];
+let selected = null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const t = iso => iso ? new Date(iso).toLocaleTimeString() : "";
+const pct = v => (v == null ? "n/a" : (v * 100).toFixed(1) + "%");
+
+async function j(url, opts) {
+  const r = await fetch(url, opts);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function scenario(name) {
+  try { await j(`/api/scenarios/${name}`, {method: "POST"}); if (name === "reset") { selected = null; } refresh(); }
+  catch (e) { alert(e.message); }
+}
+async function decide(iid, aid, decision) {
+  const comment = prompt(decision === "approve" ? "Approval note (optional)" : "Why reject?") ?? "";
+  try { await j(`/api/incidents/${iid}/actions/${aid}/${decision}`, {method: "POST", headers: {"content-type": "application/json"},
+        body: JSON.stringify({by: "demo-user", comment})}); refresh(); }
+  catch (e) { alert(e.message); }
+}
+function spark(points, thr) {
+  if (!points.length) return "";
+  const t0 = points[0][0], t1 = points[points.length - 1][0] || t0 + 1;
+  const max = Math.max(0.2, ...points.map(p => p[1]));
+  const xy = points.map(p => `${((p[0] - t0) / (t1 - t0 || 1) * 300).toFixed(1)},${(68 - p[1] / max * 64).toFixed(1)}`).join(" ");
+  const ty = (68 - thr / max * 64).toFixed(1);
+  return `<line x1="0" x2="300" y1="${ty}" y2="${ty}" stroke="var(--warn)" stroke-dasharray="3 3" stroke-width="1"/>
+          <polyline fill="none" stroke="var(--accent)" stroke-width="2" points="${xy}"/>`;
+}
+async function health() {
+  try {
+    const h = await j("/api/health");
+    const pts = (h.payment_error_rate[0] || {points: []}).points;
+    document.getElementById("err").innerHTML = spark(pts, 0.05);
+    const cur = pts.length ? pts[pts.length - 1][1] : null;
+    const ver = (h.version || []).map(s => s.labels.version).join(", ");
+    document.getElementById("errnow").innerHTML = `now <b class="${cur > 0.05 ? "bad" : "ok"}">${pct(cur)}</b> · threshold 5% · version ${esc(ver || "?")}`;
+    document.getElementById("deps").innerHTML = (h.dependency_error_rate || []).map(s => {
+      const v = s.points.length ? s.points[s.points.length - 1][1] : 0;
+      return `<div>${esc(s.labels.dependency)}: <b class="${v > 0.05 ? "bad" : "ok"}">${pct(v)}</b></div>`;
+    }).join("") || "no data yet";
+  } catch (e) { /* prometheus warming up */ }
+}
+async function refresh() {
+  try {
+    const sc = await j("/api/scenarios");
+    document.getElementById("active").textContent = sc.active ? `scenario: ${sc.active}` : "no scenario";
+  } catch (e) {}
+  let list = [];
+  try { list = (await j("/api/incidents")).incidents; } catch (e) {}
+  document.getElementById("incidents").innerHTML = list.length ? list.map(i => `
+    <div class="inc ${i.incident_id === selected ? "sel" : ""}" onclick="select('${esc(i.incident_id)}')">
+      <div class="row"><span class="id">${esc(i.incident_id)}</span><span class="chip">${esc(i.severity)}</span>
+      <span class="s-${esc(i.status)}">${esc(i.status)}</span></div>
+      <div class="muted">${esc(i.summary)}</div>
+    </div>`).join("") : '<div class="empty">No incidents yet</div>';
+  if (!selected && list.length) selected = list[0].incident_id;
+  if (selected) await detail(selected);
+  else document.getElementById("detail").innerHTML = '<div class="panel empty">Select an incident</div>';
+}
+function select(id) { selected = id; refresh(); }
+async function detail(id) {
+  let inc, slack = {channels: []};
+  try { inc = await j(`/api/incidents/${encodeURIComponent(id)}`); } catch (e) { return; }
+  try { slack = await j("/api/slack"); } catch (e) {}
+  const cur = STEPS.indexOf(inc.status);
+  const steps = STEPS.map((s, i) => `<span class="step ${i < cur ? "done" : i === cur ? "cur" : ""}">${s.replaceAll("_", " ")}</span>`).join("");
+  const hyps = (inc.current_hypotheses || []).map(h => `<li>${esc(h.hypothesis)} <span class="muted">(${(h.confidence ?? 0).toFixed(2)}, ${esc(h.status || "")})</span></li>`).join("");
+  const actions = (inc.actions || []).map(a => `
+    <div class="action">
+      <div class="row"><b>${esc(a.action)}</b><span class="chip ${a.status === "succeeded" ? "ok" : a.status === "pending_approval" ? "warn" : a.status === "denied" || a.status === "failed" || a.status === "rejected" ? "bad" : ""}">${esc(a.status)}</span>
+        <span class="muted">${esc(Object.entries(a.params || {}).map(([k, v]) => `${k}=${v}`).join(", "))}</span></div>
+      <div class="muted">${esc(a.justification)}</div>
+      <div class="muted">Policy: ${esc(a.decision?.outcome)}: ${esc(a.decision?.reason)}${a.approved_by ? ` · approved by ${esc(a.approved_by)}` : ""}</div>
+      ${a.status === "pending_approval" ? `<div class="row" style="margin-top:6px">
+        <button class="primary" onclick="decide('${esc(inc.incident_id)}','${esc(a.action_id)}','approve')">Approve</button>
+        <button class="danger" onclick="decide('${esc(inc.incident_id)}','${esc(a.action_id)}','reject')">Reject</button></div>` : ""}
+    </div>`).join("") || '<div class="muted">No remediation requested yet</div>';
+  const tl = (inc.timeline || []).slice().reverse().map(e =>
+    `<div><span class="at">${t(e.at)}</span><span class="actor">${esc(e.actor)}</span>${esc(e.message)}</div>`).join("");
+  const ch = (slack.channels || []).find(c => c.name === (inc.channel || "").replace(/^#/, "") || c.id === inc.channel)
+          || (slack.channels || []).find(c => c.name.includes(inc.incident_id.toLowerCase()));
+  const msgs = ch ? ch.messages.map(m => `<div class="msg"><span class="chip">${esc(m.kind || "update")}</span> <span class="muted">${t(new Date(parseFloat(m.ts) * 1000).toISOString())}</span>\n${esc(m.text)}</div>`).join("")
+                  : `<div class="muted">${slack.down ? "Slack is down; updates are recorded in the incident and retried." : "No channel yet"}</div>`;
+  const rca = inc.rca ? Object.entries(inc.rca.sections).map(([k, v]) => `<h3>${esc(k)}</h3><p class="${v ? "" : "muted"}">${esc(v || "pending")}</p>`).join("") : '<div class="muted">Not started</div>';
+  const running = (inc.tasks || []).filter(x => x.kind === "wake" && x.status === "running").length;
+  document.getElementById("detail").innerHTML = `
+    <div class="panel">
+      <div class="row"><h2 style="margin:0">${esc(inc.incident_id)}</h2><span class="chip">${esc(inc.severity)}</span>
+        <span class="s-${esc(inc.status)}"><b>${esc(inc.status)}</b></span>${running ? '<span class="chip">agent working</span>' : ""}</div>
+      <div>${esc(inc.summary)}</div>
+      <div class="steps">${steps}</div>
+      ${inc.root_cause ? `<div><b>Root cause</b> (${(inc.root_cause_confidence ?? 0).toFixed(2)}${inc.root_cause_confirmed ? ", confirmed" : ""}): ${esc(inc.root_cause)}</div>` : ""}
+      ${hyps ? `<div style="margin-top:6px"><b>Hypotheses</b><ul style="margin:4px 0">${hyps}</ul></div>` : ""}
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="panel"><h2>Remediation</h2>${actions}</div>
+        <div class="panel"><h2>Timeline</h2><div class="tl">${tl}</div></div>
+      </div>
+      <div>
+        <div class="panel"><h2>Slack ${ch ? "#" + esc(ch.name) : ""}</h2>${msgs}</div>
+        <div class="panel rca"><h2>RCA (${esc(inc.rca?.status || "none")}) <a href="/api/incidents/${encodeURIComponent(inc.incident_id)}/rca.md" target="_blank">markdown</a></h2>${rca}</div>
+      </div>
+    </div>`;
+}
+refresh(); health();
+setInterval(refresh, 3000); setInterval(health, 5000);
+</script>
+</body>
+</html>

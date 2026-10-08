@@ -1,0 +1,48 @@
+# A generic service ("checkout-api") whose upstream "geo-provider-a" returns 503s.
+# Deliberately not the demo's payment names: the core agent must not depend on them.
+service_health:
+  checkout-api:
+    status: critical
+    signals:
+      error_rate: {current: 0.41, peak: 0.44, baseline: 0.004, shape: sustained, onset: "now-8m", threshold: 0.05}
+      request_rate: {current: 52.0, baseline: 50.0, shape: normal}
+      latency_p95_ms: {current: 180, baseline: 120, shape: normal}
+    error_rate_by_version: {"3.2.0": 0.41}
+dependency_health:
+  checkout-api:
+    - dependency: geo-provider-a
+      status: critical
+      error_rate: {current: 0.97, peak: 0.99, baseline: 0.002, shape: sustained, onset: "now-8m"}
+      latency_p95_ms: 40
+    - dependency: geo-provider-b
+      status: healthy
+      error_rate: {current: 0.0, peak: 0.01, baseline: 0.0, shape: normal}
+      latency_p95_ms: 95
+    - dependency: fraud-check
+      status: healthy
+      error_rate: {current: 0.001, peak: 0.003, baseline: 0.001, shape: normal}
+error_signatures:
+  checkout-api:
+    - signature: "upstream geo-provider-a returned status <n>"
+      count: 412
+      baseline_count: 0
+      new: true
+      context: {dependency: geo-provider-a}
+deployments:
+  checkout-api: []
+config_changes:
+  checkout-api: []
+feature_flag_changes:
+  checkout-api: []
+capabilities:
+  checkout-api:
+    operations: [failover_dependency, rollback_deployment, restart_service]
+    dependencies: {geo-provider-a: {active: true}, geo-provider-b: {active: false}}
+    deployments: [{version: "3.2.0", current: true}, {version: "3.1.4"}]
+after_actions:
+  failover_dependency:
+    service_health:
+      checkout-api:
+        status: healthy
+        signals:
+          error_rate: {current: 0.003, peak: 0.44, baseline: 0.004, shape: recovered, threshold: 0.05}
