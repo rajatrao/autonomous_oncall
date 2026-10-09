@@ -50,6 +50,19 @@ hard-coded (see [Choosing models](docs/models.md)):
 ./scripts/demo.sh model dmr ai/qwen3.8:27b ai/qwen3.6:35b-a3b   # choose reasoning and fast models
 ```
 
+## Using it in your environment
+
+1. The agent never touches your systems directly: it calls six MCP servers that you run in your network.
+2. Each server wraps one capability: incident state, observability, changes, remediation, communications, knowledge.
+3. Behind each one you pick a provider for the tool you already use (Prometheus, Loki, GitHub, Slack, Kubernetes...) in one config file.
+4. Tools without a built-in provider plug in through two small HTTP contracts: a change feed and an operations API.
+5. Add your runbooks as markdown files; the agent searches them while investigating.
+6. Run the six servers and the gateway, and serve the agent from OCI with `docker agent serve api <registry>/oncall-agent:X.Y.Z`.
+7. Point Alertmanager, PagerDuty or any JSON webhook at the gateway; every alert becomes an incident it triages, investigates, mitigates, communicates and writes an RCA for.
+8. Start in `read-only`, move to `supervised`, then `autonomous` for low-risk actions; a policy engine checks every change.
+
+Step-by-step guide: [Getting started](docs/getting-started.md).
+
 ## What is in this repository
 
 The **product** is reusable and knows nothing about the demo:

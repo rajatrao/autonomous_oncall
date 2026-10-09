@@ -14,23 +14,101 @@ You will run four things:
 
 Plus a Postgres database for incident state (SQLite works for a single-node trial).
 
-## 1. Write a configuration
+## How your environment plugs in
 
-Copy [`config/oncall.example.yaml`](../config/oncall.example.yaml) and fill in:
+The agent never talks to your systems directly. It only calls tools on six MCP servers that you run
+inside your network. Each server wraps one capability, and behind it you choose a provider for the
+tool you already use.
 
-- `integrations`: your Prometheus (or `mock`/`none`), Loki, change feed, ops API, Slack and runbook
-  folder. See [Integrations](integrations.md) for the HTTP contracts a change feed or ops API must
-  implement.
+```
+your alerts ──► gateway ──► Docker Agent (the published oncall-agent)
+                                  │  MCP over HTTP, one token per server
+             ┌──────────┬─────────┼───────────┬────────────────┬───────────┐
+       incident_state observability changes  remediation  communications knowledge
+             │          │           │           │  (policy engine)  │         │
+         Postgres   Prometheus   your CD /   your ops API /     Slack /   runbooks
+                    + Loki       GitHub      Kubernetes         webhook   (markdown)
+```
+
+### What each phase of an incident uses
+
+| Phase | MCP server | What you plug in | Built-in providers |
+| --- | --- | --- | --- |
+| Triage | `observability` | Metrics for the alerting service | `prometheus` (your PromQL), `none` |
+| Investigation | `observability`, `changes`, `knowledge` | Metrics and logs, recent deploys / config / flag changes, runbooks and past incidents | `prometheus`, `loki`, `http` change feed, `github` deployments, `filesystem` runbooks |
+| Remediation | `remediation` | An API that can fail over, roll back, restart, scale, open a breaker or turn off a flag | `http` ops contract, `kubernetes` (restart and scale only), `dry-run` |
+| Communication | `communications` | Where updates go | `slack`, `webhook`, `log` |
+| RCA and state | `incident_state`, `knowledge` | A database | Postgres (or SQLite for a trial) |
+
+## 1. Describe your environment in one config file
+
+Copy [`config/oncall.example.yaml`](../config/oncall.example.yaml) and fill in the providers. Secrets
+stay in environment variables; the file only references them.
+
+```yaml
+integrations:
+  observability:
+    provider: prometheus
+    url: https://prometheus.internal
+    queries:                      # map the agent's signals to your metric names
+      error_rate: 'sum(rate(http_requests_total{{job="{service}",code=~"5.."}}[{window}])) / sum(rate(http_requests_total{{job="{service}"}}[{window}]))'
+  logs:        {provider: loki, url: https://loki.internal, selector: '{{app="{service}"}}'}
+  changes:     {provider: github, token: "${GITHUB_DEPLOYMENTS_READ_TOKEN}", repos: {checkout-api: acme/checkout}}
+  remediation: {provider: dry-run}            # start here; switch to http when you trust it
+  communications: {provider: slack, token: "${SLACK_BOT_TOKEN}"}
+  knowledge:   {provider: filesystem, runbooks_dir: /config/runbooks}
+
+autonomy:
+  mode: read-only                 # investigate and report, change nothing
+remediation:
+  allowed_services: ["checkout-*"]
+  failover_targets: {payments-provider-a: [payments-provider-b]}
+```
+
+Then set:
+
 - `autonomy`: start with `mode: read-only`. The agent investigates, diagnoses, communicates and
-  writes the RCA, but every remediation is denied. Move to `supervised` (every change needs
-  approval) and then `autonomous` per category when you trust it. See [Configuration](configuration.md).
+  writes the RCA, but every remediation is denied. See [Configuration](configuration.md).
 - `remediation`: the services the agent may touch, failover pairs, scale limits and flags.
 - Tokens: every `${VAR}` is read from the environment. Do not put secrets in the file.
 
-Runbooks are markdown files with YAML frontmatter (`title`, `services`, `tags`). Four examples are
-in [`demo/config/runbooks/`](../demo/config/runbooks/).
+## 2. Connect the tools that have no built-in provider
 
-## 2. Run the MCP servers and the gateway
+Two capabilities are generic HTTP contracts, so any CD system or platform can be connected with a
+thin adapter instead of changing the agent:
+
+- **Change feed** (deploys, config and flag changes):
+  `GET /v1/changes/{deployments|config|feature-flags}?service=&since_minutes=` returning
+  `{"items": [{"at", "service", "kind", "from", "to", "actor", "description"}]}`.
+- **Operations API** (the only way the agent can change production):
+  `GET /v1/capabilities?service=` and `POST /v1/actions/{action}` with an `Idempotency-Key` header.
+  Actions are the six typed operations: `failover_dependency`, `rollback_deployment`,
+  `restart_service`, `scale_service`, `enable_circuit_breaker`, `disable_feature_flag`.
+  Typically a small service in front of Argo CD, Spinnaker, your service mesh or feature-flag
+  system.
+
+The demo's `platform-control` service is a working reference for both
+([`demo/app/platform_control.py`](../demo/app/platform_control.py)). Full contracts:
+[docs/integrations.md](integrations.md). A new built-in provider (Datadog, PagerDuty, Teams...)
+is one Python class; see [docs/developing.md](developing.md#add-a-provider).
+
+## 3. Add your runbooks
+
+Markdown files with frontmatter, one per known failure mode. The agent searches them during
+investigation and prefers their procedures when it proposes a fix.
+
+```markdown
+---
+title: Payments provider failover
+services: [checkout-api]
+tags: [dependency, failover, payments]
+---
+Symptoms: ... Evidence to confirm: ... Mitigation: failover_dependency to payments-provider-b ...
+```
+
+Four examples are in [`demo/config/runbooks/`](../demo/config/runbooks/).
+
+## 4. Run the MCP servers and the gateway
 
 Each MCP server should run as its own container with its own bearer token and only the backend
 credential it needs (the remediation server is the only one with an ops token, for example). The
@@ -64,7 +142,7 @@ services:
 observability, changes, remediation, communications, knowledge. `GET /healthz` on each returns its
 MCP interface version.
 
-## 3. Run the agent
+## 5. Run the agent
 
 Serve the published artifact with the official Docker Agent image and point it at your MCP servers:
 
@@ -103,7 +181,7 @@ The gateway's `runner` section tells it how to reach the agent: `docker-agent-ap
 or `docker-agent-exec`, which runs `docker agent run --exec` per incident wake-up. See
 [Configuration](configuration.md#runner).
 
-## 4. Send alerts
+## 6. Send alerts
 
 Point your alerting at the gateway:
 
@@ -117,7 +195,7 @@ Point your alerting at the gateway:
 All ingestion endpoints require `Authorization: Bearer <ingestion.webhook.auth_token>`. Re-sending an
 event is safe: duplicates by `event_id` or `idempotency_key` are acknowledged and ignored.
 
-## 5. Watch and approve
+## 7. Watch and approve
 
 ```bash
 curl -H "Authorization: Bearer $ONCALL_GATEWAY_API_TOKEN" localhost:7100/v1/incidents
@@ -130,11 +208,19 @@ curl -X POST -H "Authorization: Bearer $ONCALL_GATEWAY_APPROVER_TOKEN" \
 With Slack configured, the agent opens an incident channel and posts updates there. The approver
 token is separate from the read token so that read access (dashboards) cannot approve changes.
 
-## Rolling out safely
+## 8. Turn up autonomy gradually
 
-1. `read-only` against production for a few weeks. Compare the agent's RCAs with your own.
-2. `supervised`: the agent proposes, a human approves every change.
-3. `autonomous` for low-risk categories only (failover between pre-approved targets, circuit
-   breakers), with `min_confidence` at 0.8 or higher. Rollbacks and restarts stay on approval.
+| Stage | Setting | The agent... |
+| --- | --- | --- |
+| Trial | `mode: read-only`, `remediation.provider: dry-run` | investigates and recommends; changes nothing |
+| Supervised | `mode: supervised` | proposes typed actions; a human approves each one |
+| Autonomous | `mode: autonomous` with per-category settings | acts on low-risk categories (e.g. failover to pre-approved targets) by itself; the rest still need approval |
 
-Read the [security model](security.md) before going past step 1.
+Whatever the model decides, the remediation server's policy engine checks every action against
+`allowed_services`, `failover_targets`, limits and a minimum confidence, and logs it to the audit
+trail. There is no shell or generic HTTP tool. See [docs/security.md](security.md).
+
+A sensible path: `read-only` against production for a few weeks, comparing the agent's RCAs with
+your own; then `supervised`; then `autonomous` for low-risk categories only (failover between
+pre-approved targets, circuit breakers) with `min_confidence` at 0.8 or higher, keeping rollbacks and
+restarts on approval. Read the [security model](security.md) before leaving `read-only`.
