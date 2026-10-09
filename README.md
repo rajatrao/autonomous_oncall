@@ -99,6 +99,7 @@ For people **using** the agent (operators, SREs):
 For people **developing** the agent:
 
 - [Architecture](docs/architecture.md)
+- [Runners](docs/runners.md): when and how the gateway runs the agent (API or exec)
 - [Developing](docs/developing.md): build, test, add a skill, a provider or a remediation action
 - [Event schema](docs/event-schema.md) and [Versioning and compatibility](docs/versioning.md)
 - [Demo internals](docs/demo.md)

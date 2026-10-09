@@ -32,6 +32,8 @@ both documented Docker Agent entry points:
   with `POST /api/sessions/:id/agent/:agent` (SSE) on a `docker agent serve api` server.
 - `docker-agent-exec`: the gateway runs `docker agent run --exec --json --session <id> <agent> <message>`.
 
+When each runner is called, how runs are scheduled, retried and judged: [Runners](runners.md).
+
 The wake-up message contains only the incident id, the reason and the events since the last run.
 Everything else the agent reads from durable state through tools, so a crashed run can be resumed
 by any later run.

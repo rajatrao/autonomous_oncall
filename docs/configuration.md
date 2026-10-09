@@ -97,6 +97,8 @@ runner:
 For `docker-agent-exec`: `binary` (`docker-agent` or `docker agent`), `agent_ref` (file or OCI
 reference), `flavors`, `extra_args`.
 
+How the two runners behave, and how to choose: [Runners](runners.md).
+
 ## Ingestion
 
 ```yaml
