@@ -921,6 +921,65 @@ permissions:
 runtime:
   safety: restricted
 flavors:
+  anthropic:
+    models:
+      reasoning:
+        provider: anthropic
+        model: ${env.ONCALL_REASONING_MODEL}
+      fast:
+        provider: anthropic
+        model: ${env.ONCALL_FAST_MODEL}
+  openai:
+    models:
+      reasoning:
+        provider: openai
+        model: ${env.ONCALL_REASONING_MODEL}
+      fast:
+        provider: openai
+        model: ${env.ONCALL_FAST_MODEL}
+  openai-compatible:
+    models:
+      reasoning:
+        provider: openai
+        model: ${env.ONCALL_REASONING_MODEL}
+        base_url: ${env.ONCALL_MODEL_BASE_URL}
+        token_key: ONCALL_MODEL_API_KEY
+      fast:
+        provider: openai
+        model: ${env.ONCALL_FAST_MODEL}
+        base_url: ${env.ONCALL_MODEL_BASE_URL}
+        token_key: ONCALL_MODEL_API_KEY
+  dmr:
+    models:
+      reasoning:
+        provider: dmr
+        model: ${env.ONCALL_REASONING_MODEL}
+        max_tokens: 8192
+        provider_opts:
+          context_size: 65536
+          keep_alive: 30m
+      fast:
+        provider: dmr
+        model: ${env.ONCALL_FAST_MODEL}
+        max_tokens: 4096
+        provider_opts:
+          context_size: 65536
+          keep_alive: 30m
+          extra_body:
+            chat_template_kwargs:
+              enable_thinking: false
+  ollama:
+    models:
+      reasoning:
+        provider: ollama
+        model: ${env.ONCALL_REASONING_MODEL}
+        base_url: ${env.ONCALL_OLLAMA_URL}
+        max_tokens: 8192
+      fast:
+        provider: ollama
+        model: ${env.ONCALL_FAST_MODEL}
+        base_url: ${env.ONCALL_OLLAMA_URL}
+        max_tokens: 4096
   scripted-model:
     models:
       reasoning:

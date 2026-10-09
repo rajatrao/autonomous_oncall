@@ -739,13 +739,17 @@ def create_app():
     def health():
         return {"status": "ok"}
 
+    # /engines/v1 is the Docker Model Runner layout, so the dmr provider can be tested against
+    # this server too (MODEL_RUNNER_HOST=http://host:port).
     @app.get("/v1/models")
     @app.get("/models")
+    @app.get("/engines/v1/models")
     def models():
         return {"object": "list", "data": [{"id": "scripted-oncall", "object": "model", "owned_by": "oncall"}]}
 
     @app.post("/v1/chat/completions")
     @app.post("/chat/completions")
+    @app.post("/engines/v1/chat/completions")
     async def chat(request: Request):
         body = await request.json()
         try:
@@ -769,6 +773,12 @@ def create_app():
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.api_route("/{path:path}", methods=["GET", "POST"])
+    async def other(path: str, request: Request):
+        # Runner housekeeping calls (DMR _configure, model inspection) have nothing to do here.
+        log.info("scripted model: ignoring %s /%s", request.method, path)
+        return JSONResponse({})
 
     return app
 

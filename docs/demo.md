@@ -68,7 +68,7 @@ Variables in `.env` (applied with `docker compose up -d`):
 
 | Variable | Effect |
 | --- | --- |
-| `ONCALL_AGENT_FLAVOR=live` + `ANTHROPIC_API_KEY` | Use the real models from the agent file instead of the scripted model |
+| `ONCALL_AGENT_FLAVOR`, `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL` | The model; set them with `./scripts/demo.sh model ...` ([Choosing models](models.md)) |
 | `ONCALL_AUTONOMY_MODE=read-only` / `supervised` | Global autonomy level |
 | `ONCALL_FAILOVER_MODE=approval_required` | Make bank-outage wait for approval too |
 | `ONCALL_ROLLBACK_MODE=automatic` | Let bad-deployment roll back on its own |

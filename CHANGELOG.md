@@ -7,6 +7,13 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 
 ## [Unreleased]
 
+### Added
+
+- Configurable models: provider flavors `anthropic`, `openai`, `openai-compatible`, `dmr` (Docker
+  Model Runner) and `ollama`, with model ids from `ONCALL_REASONING_MODEL` and `ONCALL_FAST_MODEL`.
+- Local models in the demo: `./scripts/demo.sh model dmr|ollama|...`, defaulting to Qwen3.6 35B-A3B.
+- docs/models.md.
+
 ## [0.1.0] - 2026-10-08
 
 First proof of concept.

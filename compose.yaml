@@ -61,9 +61,22 @@ services:
       - --session-db=/tmp/session.db
       - --flavor=${ONCALL_AGENT_FLAVOR:-scripted-model}
     volumes: ["./dist:/agent:ro"]
+    # The model is chosen with ONCALL_AGENT_FLAVOR (scripted-model, dmr, ollama, anthropic, openai,
+    # openai-compatible) and ONCALL_REASONING_MODEL / ONCALL_FAST_MODEL. `./scripts/demo.sh model`
+    # sets them in .env; see docs/models.md.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     environment:
       TELEMETRY_ENABLED: "false"
+      ONCALL_REASONING_MODEL: ${ONCALL_REASONING_MODEL:-ai/qwen3.6:35b-a3b}
+      ONCALL_FAST_MODEL: ${ONCALL_FAST_MODEL:-ai/qwen3.6:35b-a3b}
+      # Docker Model Runner as seen from a container on Docker Desktop.
+      MODEL_RUNNER_HOST: ${MODEL_RUNNER_HOST:-http://model-runner.docker.internal}
+      # Ollama running natively on the host (it has the GPU; Ollama in a container on a Mac does not).
+      ONCALL_OLLAMA_URL: ${ONCALL_OLLAMA_URL:-http://host.docker.internal:11434/v1}
+      ONCALL_MODEL_BASE_URL: ${ONCALL_MODEL_BASE_URL:-}
+      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ONCALL_SCRIPTED_MODEL_URL: http://scripted-model:7199/v1
       ONCALL_SCRIPTED_MODEL_TOKEN: scripted
       ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp

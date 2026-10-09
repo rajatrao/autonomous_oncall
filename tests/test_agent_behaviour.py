@@ -81,9 +81,15 @@ def agent_env(tmp_path, monkeypatch):
             "version": "1.0", "event_type": "incident.created", "event_id": "evt-1", "timestamp": "2026-10-08T15:03:00Z",
             "incident": {"id": "TEST-1", "severity": "SEV2", "service": "checkout-api", "summary": "Checkout errors elevated"}}))
 
-        def run_agent(message="Wake-up: incident_id=TEST-1\nreason: event"):
+        model_url = f"http://127.0.0.1:{mport}"
+        # Provider flavors are exercised against the scripted model too: only the transport differs.
+        child_env.update(ONCALL_REASONING_MODEL="scripted-oncall", ONCALL_FAST_MODEL="scripted-oncall",
+                         ONCALL_OLLAMA_URL=f"{model_url}/v1", ONCALL_MODEL_BASE_URL=f"{model_url}/v1",
+                         ONCALL_MODEL_API_KEY="test", MODEL_RUNNER_HOST=model_url)
+
+        def run_agent(message="Wake-up: incident_id=TEST-1\nreason: event", flavor="scripted-model"):
             proc = subprocess.run(
-                [BINARY, "run", "--exec", "--safety", "restricted", "--flavor", "scripted-model",
+                [BINARY, "run", "--exec", "--safety", "restricted", "--flavor", flavor,
                  "--data-dir", str(tmp_path / "da"), str(ROOT / "dist" / "oncall-agent.yaml"), message],
                 env=child_env, capture_output=True, text=True, timeout=600)
             assert proc.returncode == 0, proc.stderr[-2000:]
@@ -110,6 +116,17 @@ def test_dependency_outage_fails_over_and_closes(agent_env):
     assert inc["root_cause_confirmed"] and "geo-provider-a" in inc["root_cause"]
     assert inc["rca"]["status"] == "final" and all(inc["rca"]["sections"].values())
     assert {c["kind"] for c in inc["communications"]} >= {"initial", "recovery"}
+
+
+@pytest.mark.parametrize("flavor", ["ollama", "dmr", "openai-compatible"])
+def test_provider_flavors_drive_the_same_agent(agent_env, flavor):
+    """The local-model flavors reach the model through their own provider (Ollama, Docker Model
+    Runner, any OpenAI-compatible server) with model ids from the environment."""
+    store, run = agent_env("dependency_outage")
+    run(flavor=flavor)
+    inc = store.get_incident("TEST-1")
+    assert inc["status"] == "CLOSED"
+    assert _actions(store) == [("failover_dependency", "succeeded")]
 
 
 def test_bad_deployment_rolls_back(agent_env):

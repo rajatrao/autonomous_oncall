@@ -85,6 +85,10 @@ Serve the published artifact with the official Docker Agent image and point it a
       # ...one URL and one token per capability group
 ```
 
+Without a flavor the agent uses Anthropic models. To use another provider or local models, add
+for example `--flavor dmr` and set `ONCALL_REASONING_MODEL` / `ONCALL_FAST_MODEL`; see
+[Choosing models](models.md).
+
 Docker Agent pulls the OCI reference itself ([Agent distribution](https://docs.docker.com/ai/docker-agent/concepts/distribution/)).
 To inspect or try the agent from a terminal instead:
 

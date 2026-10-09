@@ -10,6 +10,8 @@
 #   ./scripts/demo.sh approve [ID]     approve the pending remediation (latest incident by default)
 #   ./scripts/demo.sh reject  [ID]     reject it
 #   ./scripts/demo.sh down             stop and remove containers and volumes
+#   ./scripts/demo.sh model dmr|ollama|anthropic|openai|scripted [REASONING_MODEL] [FAST_MODEL]
+#                                      choose the model (default: scripted, no API key; see docs/models.md)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -72,6 +74,56 @@ decide() {
        "$GATEWAY/v1/incidents/$iid/actions/$aid/$decision" | json 'print(d["action"]["action"], "->", d["action"]["status"])'
 }
 
+set_env() { # set KEY=VALUE in .env, replacing an existing line (portable: no sed -i)
+  python3 - "$ENV_FILE" "$1" "$2" <<'PY'
+import sys
+path, key, value = sys.argv[1:]
+lines = [l for l in open(path).read().splitlines() if not l.startswith(key + "=")]
+lines.append(f"{key}={value}")
+open(path, "w").write("\n".join(lines) + "\n")
+PY
+}
+
+choose_model() {
+  local provider=${1:-} reasoning=${2:-} fast=${3:-} flavor
+  ensure_env
+  case $provider in
+    dmr)
+      flavor=dmr; reasoning=${reasoning:-ai/qwen3.6:35b-a3b}; fast=${fast:-$reasoning}
+      docker model status >/dev/null 2>&1 || { echo "Docker Model Runner is not available: enable it in Docker Desktop (Settings > AI)." >&2; exit 1; }
+      for m in $(printf '%s\n' "$reasoning" "$fast" | sort -u); do echo "Pulling $m (once; large models take a while)"; docker model pull "$m"; done
+      ;;
+    ollama)
+      flavor=ollama; reasoning=${reasoning:-qwen3.6:35b-a3b}; fast=${fast:-$reasoning}
+      if command -v ollama >/dev/null; then
+        for m in $(printf '%s\n' "$reasoning" "$fast" | sort -u); do echo "Pulling $m"; ollama pull "$m"; done
+      else
+        echo "ollama CLI not found; make sure the Ollama server on this machine has $reasoning and $fast." >&2
+      fi
+      echo "Start Ollama with a large context window, e.g.:  OLLAMA_CONTEXT_LENGTH=65536 ollama serve"
+      ;;
+    anthropic)
+      flavor=anthropic; reasoning=${reasoning:-claude-sonnet-5-5}; fast=${fast:-claude-haiku-5-5}
+      grep -q '^ANTHROPIC_API_KEY=.' "$ENV_FILE" || echo "Add ANTHROPIC_API_KEY=... to .env" >&2
+      ;;
+    openai)
+      flavor=openai; reasoning=${reasoning:?give the reasoning model id}; fast=${fast:-$reasoning}
+      grep -q '^OPENAI_API_KEY=.' "$ENV_FILE" || echo "Add OPENAI_API_KEY=... to .env" >&2
+      ;;
+    scripted)
+      flavor=scripted-model
+      ;;
+    *) echo "usage: $0 model dmr|ollama|anthropic|openai|scripted [REASONING_MODEL] [FAST_MODEL]" >&2; exit 1 ;;
+  esac
+  set_env ONCALL_AGENT_FLAVOR "$flavor"
+  [[ -n $reasoning ]] && set_env ONCALL_REASONING_MODEL "$reasoning"
+  [[ -n $fast ]] && set_env ONCALL_FAST_MODEL "$fast"
+  echo "Model: $flavor${reasoning:+ (reasoning=$reasoning, fast=$fast)}"
+  if docker compose ps --status running --services 2>/dev/null | grep -qx docker-agent; then
+    docker compose up -d docker-agent
+  fi
+}
+
 case "${1:-help}" in
   up)
     ensure_env
@@ -99,7 +151,8 @@ MSG
     curl -fsS -H "Authorization: Bearer $(READ_TOKEN)" "$GATEWAY/v1/incidents" |
       json '[print("%-22s %-5s %-22s %s" % (i["incident_id"], i["severity"], i["status"], i["summary"])) for i in d["incidents"]] or print("no incidents")'
     ;;
+  model) choose_model "${2:-}" "${3:-}" "${4:-}" ;;
   approve) decide approve "${2:-}" ;;
   reject) decide reject "${2:-}" ;;
-  *) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

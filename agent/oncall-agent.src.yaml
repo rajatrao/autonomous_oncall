@@ -20,6 +20,11 @@ metadata:
   version: "@version"
   tags: [oncall, incident-response, sre, mcp]
 
+# Two model roles. "reasoning" runs the Incident Commander, Diagnostics, Remediation and RCA;
+# "fast" runs Triage, the investigators and Communications. These defaults need ANTHROPIC_API_KEY.
+# To use other models without editing this file, enable one of the provider flavors at the end of
+# the file (anthropic, openai, openai-compatible, dmr, ollama) and set ONCALL_REASONING_MODEL and
+# ONCALL_FAST_MODEL, or override per run with `docker agent run|serve ... --model`.
 models:
   reasoning:
     provider: anthropic
@@ -327,6 +332,68 @@ runtime:
   safety: restricted
 
 flavors:
+  # Provider flavors: pick the provider here, pick the model ids with environment variables.
+  # ONCALL_REASONING_MODEL and ONCALL_FAST_MODEL are required with these flavors (Docker Agent
+  # reports an unset variable instead of guessing). See docs/models.md for recommended models.
+  anthropic:
+    models:
+      reasoning: {provider: anthropic, model: "${env.ONCALL_REASONING_MODEL}"}
+      fast: {provider: anthropic, model: "${env.ONCALL_FAST_MODEL}"}
+  openai:
+    models:
+      reasoning: {provider: openai, model: "${env.ONCALL_REASONING_MODEL}"}
+      fast: {provider: openai, model: "${env.ONCALL_FAST_MODEL}"}
+  # Any OpenAI-compatible endpoint (vLLM, LM Studio, LiteLLM, a corporate gateway).
+  openai-compatible:
+    models:
+      reasoning:
+        provider: openai
+        model: "${env.ONCALL_REASONING_MODEL}"
+        base_url: "${env.ONCALL_MODEL_BASE_URL}"
+        token_key: ONCALL_MODEL_API_KEY
+      fast:
+        provider: openai
+        model: "${env.ONCALL_FAST_MODEL}"
+        base_url: "${env.ONCALL_MODEL_BASE_URL}"
+        token_key: ONCALL_MODEL_API_KEY
+  # Docker Model Runner. The endpoint is discovered, or taken from MODEL_RUNNER_HOST (set it when
+  # Docker Agent itself runs in a container, e.g. http://model-runner.docker.internal).
+  dmr:
+    models:
+      reasoning:
+        provider: dmr
+        model: "${env.ONCALL_REASONING_MODEL}"
+        max_tokens: 8192
+        provider_opts:
+          context_size: 65536
+          keep_alive: "30m"
+      fast:
+        provider: dmr
+        model: "${env.ONCALL_FAST_MODEL}"
+        max_tokens: 4096
+        provider_opts:
+          context_size: 65536
+          keep_alive: "30m"
+          # Investigators and triage do not need long thinking; models whose chat template
+          # does not know this switch ignore it.
+          extra_body:
+            chat_template_kwargs:
+              enable_thinking: false
+  # Ollama. Set ONCALL_OLLAMA_URL (http://localhost:11434/v1 on the host,
+  # http://host.docker.internal:11434/v1 from a container) and start Ollama with a large enough
+  # context, e.g. OLLAMA_CONTEXT_LENGTH=65536 ollama serve.
+  ollama:
+    models:
+      reasoning:
+        provider: ollama
+        model: "${env.ONCALL_REASONING_MODEL}"
+        base_url: "${env.ONCALL_OLLAMA_URL}"
+        max_tokens: 8192
+      fast:
+        provider: ollama
+        model: "${env.ONCALL_FAST_MODEL}"
+        base_url: "${env.ONCALL_OLLAMA_URL}"
+        max_tokens: 4096
   # Replaces the LLM with the deterministic scripted model in src/oncall_testing. Used by CI and
   # by the keyless demo. The agents, prompts, tools and policies stay exactly the same.
   scripted-model:

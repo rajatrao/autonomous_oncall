@@ -40,15 +40,15 @@ Then break something and watch the agent work in the dashboard:
 `./scripts/demo.sh reset` clears faults, incidents and metrics between scenarios;
 `./scripts/demo.sh down` removes everything.
 
-To use a real model instead of the scripted one:
+To use a real model instead of the scripted one, pick a provider; models are configurable, not
+hard-coded (see [Choosing models](docs/models.md)):
 
 ```bash
-echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env       # .env is git-ignored
-sed -i.bak 's/^ONCALL_AGENT_FLAVOR=.*/ONCALL_AGENT_FLAVOR=live/' .env
-docker compose up -d docker-agent
+./scripts/demo.sh model dmr        # local: Docker Model Runner, Qwen3.6 35B-A3B (~22 GB, 32 GB Mac)
+./scripts/demo.sh model ollama     # local: Ollama on your machine, same model
+./scripts/demo.sh model anthropic  # hosted: add ANTHROPIC_API_KEY=... to .env first
+./scripts/demo.sh model dmr ai/qwen3.8:27b ai/qwen3.6:35b-a3b   # choose reasoning and fast models
 ```
-
-`live` is not a defined flavor, so Docker Agent ignores it and uses the models in the agent file.
 
 ## What is in this repository
 
@@ -78,6 +78,7 @@ For people **using** the agent (operators, SREs):
 
 - [Getting started](docs/getting-started.md): run the published agent against your own systems
 - [Configuration](docs/configuration.md): autonomy levels, policy, providers, multi-tenant setup
+- [Choosing models](docs/models.md): hosted or local (Docker Model Runner, Ollama), per role
 - [Integrations](docs/integrations.md): the MCP capability groups and the provider contracts
 - [Incident lifecycle](docs/incident-lifecycle.md): states, events, approvals, RCA
 - [Security model](docs/security.md)
@@ -104,7 +105,11 @@ Everything here is documented Docker Agent functionality, pinned and tested agai
   [Structured output](https://docs.docker.com/ai/docker-agent/configuration/structured-output/)
 - Permissions and the fail-closed `restricted` safety mode:
   [Permissions](https://docs.docker.com/ai/docker-agent/configuration/permissions/)
-- Flavors (the `scripted-model` variant): [Flavors](https://docs.docker.com/ai/docker-agent/configuration/flavors/)
+- Flavors (provider variants: `dmr`, `ollama`, `openai-compatible`, ..., and `scripted-model`):
+  [Flavors](https://docs.docker.com/ai/docker-agent/configuration/flavors/)
+- Local models through [Docker Model Runner](https://docs.docker.com/ai/docker-agent/providers/dmr/)
+  and [Ollama](https://docs.docker.com/ai/docker-agent/providers/local/), with model ids from the
+  environment ([Models](https://docs.docker.com/ai/docker-agent/configuration/models/))
 - `docker agent serve api` with `--auth-token` (how the gateway runs the agent):
   [API server](https://docs.docker.com/ai/docker-agent/features/api-server/)
 - `docker agent share push` / `run <oci-ref>` with optional signing:
