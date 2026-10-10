@@ -13,11 +13,12 @@ import logging
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
+from oncall_core import decision_points as dp
 from oncall_core.lifecycle import Status, can_transition
-from oncall_core.policy import ACTIONS, ALLOW, DENY, REQUIRE_APPROVAL, RemediationPolicy
+from oncall_core.policy import ACTIONS, ALLOW, DENY, REQUIRE_APPROVAL, Decision, RemediationPolicy
 from oncall_core.util import stable_hash
 from oncall_integrations.base import IntegrationUnavailable, NotSupported
-from ..common import PRODUCTION_CHANGE, READ, Context, tool_errors
+from ..common import PRODUCTION_CHANGE, READ, Context, decide, tool_errors
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +59,17 @@ class RemediationService:
             return {**_public(existing), "duplicate": True,
                     "note": "this exact action was already requested; returning its current state"}
 
-        decision = self.policy.evaluate(action, params, confidence=confidence, prior_action_count=len(prior))
+        top = (inc.get("current_hypotheses") or [{}])[0]
+        decision = self.policy.evaluate(action, params, confidence=confidence, prior_action_count=len(prior),
+                                        diagnosis_category=top.get("category"))
+        if decision.outcome == ALLOW:
+            # Optional and tighten-only: the decision model can send an automatic action to a human,
+            # never allow one the policy did not already allow.
+            res = decide(self.ctx, *dp.remediation_consistency(inc, action, params, justification, evidence))
+            if res is not None and res.active and res.applied.get("consistent") is False:
+                decision = Decision(REQUIRE_APPROVAL, "the decision model judged that this action may not follow from "
+                                                      "the root cause and evidence; a human should confirm it",
+                                    decision.policy_mode)
         initial = {ALLOW: "approved", REQUIRE_APPROVAL: "pending_approval", DENY: "denied"}[decision.outcome]
         spec = ACTIONS.get(action)
         record, created = store.create_action(

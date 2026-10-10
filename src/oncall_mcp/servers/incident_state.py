@@ -7,8 +7,10 @@ from typing import Literal
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
+from oncall_core import decision_points as dp
+from oncall_core.decisions import DecisionSettings
 from oncall_core.lifecycle import Status
-from ..common import READ, WRITE_STATE, Context, tool_errors
+from ..common import READ, WRITE_STATE, Context, decide, tool_errors
 
 StatusName = Literal["DETECTED", "TRIAGING", "INVESTIGATING", "ROOT_CAUSE_IDENTIFIED", "REMEDIATION_PROPOSED",
                      "REMEDIATING", "VERIFYING", "RECOVERED", "CLOSED"]
@@ -40,6 +42,7 @@ def _compact(inc: dict) -> dict:
 
 
 def build(ctx: Context) -> MCPServer:
+    rules = DecisionSettings.from_config(ctx.config)
     mcp = MCPServer(
         name="oncall-incident-state",
         version="1.0",
@@ -89,6 +92,8 @@ def build(ctx: Context) -> MCPServer:
         ctx.store.update_incident(incident_id, "triage", **fields)
         ctx.store.append_timeline(incident_id, "triage", f"Triage complete: {severity}, {impact}", "triage",
                                   {"affected_dependencies": affected_dependencies})
+        # Shadow only: the triage specialist's severity stays authoritative.
+        decide(ctx, *dp.severity(inc, triage))
         return {"incident_id": incident_id, "recorded": True}
 
     @mcp.tool(annotations=WRITE_STATE)
@@ -101,6 +106,13 @@ def build(ctx: Context) -> MCPServer:
             d = h.model_dump()
             d["id"] = f"H{i + 1}"
             items.append(d)
+        if items:
+            inc = ctx.store.get_incident(incident_id, full=False)
+            res = decide(ctx, *dp.diagnosis_category(inc, items[0]))
+            if res is not None and res.active and res.applied.get("category") != items[0].get("category"):
+                items[0]["category_llm"] = items[0].get("category")
+                items[0]["category"] = res.applied["category"]
+                items[0]["category_source"] = res.strategy
         ctx.store.update_incident(incident_id, "diagnostics", current_hypotheses=items)
         if items:
             top = items[0]
@@ -121,8 +133,23 @@ def build(ctx: Context) -> MCPServer:
             if not succeeded or inc["status"] not in (Status.VERIFYING.value, Status.RECOVERED.value):
                 raise ValueError("cannot confirm a root cause before a successful remediation is verified "
                                  "(incident must be VERIFYING or RECOVERED with a succeeded action)")
-        if not confirmed and len(evidence) < 1:
-            raise ValueError("a root cause needs at least one piece of evidence")
+        if not confirmed:
+            if len(evidence) < max(1, rules.root_cause_min_evidence):
+                raise ValueError(f"an unconfirmed root cause needs at least {max(1, rules.root_cause_min_evidence)} "
+                                 f"independent evidence items (got {len(evidence)}); keep investigating and record "
+                                 "hypotheses instead")
+            if confidence < rules.root_cause_min_confidence:
+                raise ValueError(f"confidence {confidence:.2f} is below {rules.root_cause_min_confidence}; this is a "
+                                 "hypothesis, not a root cause. Record it with record_hypotheses and keep investigating")
+            inc = ctx.store.get_incident(incident_id, full=False)
+            res = decide(ctx, *dp.evidence_sufficiency(inc, root_cause, confidence, evidence))
+            # Tighten-only: the decision model can reject a root cause, never accept one on its own.
+            if res is not None and res.active and res.applied.get("sufficient") is False:
+                ctx.store.append_timeline(incident_id, "decision",
+                                          "Root cause not recorded: the decision model judged the evidence insufficient "
+                                          "or not independent; continuing investigation", "decisions")
+                raise ValueError("the evidence does not look sufficient or independent enough to call this the root "
+                                 "cause; gather corroborating evidence from another source and try again")
         fields = {"root_cause": root_cause, "root_cause_confidence": confidence, "root_cause_confirmed": confirmed}
         if evidence:
             fields["root_cause_evidence"] = evidence

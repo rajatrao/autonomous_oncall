@@ -7,9 +7,11 @@ from typing import Literal
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from oncall_core.store import RCA_SECTIONS
+from oncall_core import decision_points as dp
+from oncall_core.decisions import DecisionType
+from oncall_core.store import RCA_SECTIONS, NotFound
 from oncall_core.util import iso
-from ..common import READ, WRITE_STATE, Context, tool_errors
+from ..common import READ, WRITE_STATE, Context, decide, tool_errors
 
 Section = Literal[tuple(RCA_SECTIONS)]  # type: ignore[valid-type]
 _W = re.compile(r"[a-z0-9]+")
@@ -26,9 +28,35 @@ def build(ctx: Context) -> MCPServer:
 
     @mcp.tool(annotations=READ)
     @tool_errors
-    def search_runbooks(query: str, service: str | None = None, limit: int = Field(5, ge=1, le=20)) -> dict:
-        """Keyword search over runbooks; boosts runbooks that list the given service."""
-        return {"runbooks": kb().search_runbooks(query, service, limit)}
+    def search_runbooks(query: str, service: str | None = None, limit: int = Field(5, ge=1, le=20),
+                        incident_id: str | None = None) -> dict:
+        """Keyword search over runbooks; boosts runbooks that list the given service. Pass incident_id
+        so the best match can be chosen with the incident's context."""
+        if ctx.router.mode(DecisionType.RUNBOOK_SELECTION) == "off":
+            return {"runbooks": kb().search_runbooks(query, service, limit)}
+        candidates = kb().search_runbooks(query, service, max(limit, 10))
+        if not candidates:
+            return {"runbooks": []}
+        incident = None
+        if incident_id:
+            try:
+                incident = ctx.store.get_incident(incident_id, full=False)
+            except NotFound:
+                incident = None
+        if incident is None:
+            env = ctx.config.get("incident", {}).get("default_environment")
+            incident = {"environment": env} if env else None
+        res = decide(ctx, *dp.runbook_selection(query, service, candidates, incident))
+        runbooks = candidates[:limit]
+        if res is None or not res.active:
+            return {"runbooks": runbooks}  # shadow mode: the agent sees exactly the keyword ranking
+        chosen = res.applied.get("runbook_id")
+        if chosen is None:
+            return {"runbooks": runbooks, "selection": {"recommended": None, "strategy": res.strategy,
+                                                        "note": "no candidate clearly applies; treat these as weak matches"}}
+        best = next(r for r in candidates if r["id"] == chosen)
+        runbooks = [best] + [r for r in candidates if r["id"] != chosen][: limit - 1]
+        return {"runbooks": runbooks, "selection": {"recommended": chosen, "strategy": res.strategy}}
 
     @mcp.tool(annotations=READ)
     @tool_errors

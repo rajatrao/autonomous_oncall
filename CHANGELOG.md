@@ -13,6 +13,23 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
   Model Runner) and `ollama`, with model ids from `ONCALL_REASONING_MODEL` and `ONCALL_FAST_MODEL`.
 - Local models in the demo: `./scripts/demo.sh model dmr|ollama|...`, defaulting to Qwen3.6 35B-A3B.
 - docs/models.md.
+- Optional decision models for bounded decisions (docs/decisions.md): TypeSafe's Jev API
+  (`/v1/systemone`), served locally by Ollama for Nimble or hosted by TypeSafe. Decision points:
+  runbook selection, diagnosis category, evidence sufficiency and remediation consistency
+  (tighten-only), severity (shadow only). Off by default; shadow and per-decision active modes,
+  validation, configurable fallback (baseline, escalate, LLM), egress guard, `decisions` table,
+  `GET /v1/incidents/{id}/decisions`, `GET /v1/decisions`, decision metrics,
+  `scripts/benchmark_decisions.py`, `scripts/probe_models.py`, `./scripts/demo.sh jev ...`.
+- `verify_recovery` observability tool: deterministic recovered / settling / not_recovered verdict
+  used by the remediation specialist.
+- Optional `remediation.category_actions` policy rule (tighten-only).
+
+### Changed
+
+- `set_root_cause` now enforces what the Commander's instructions already required for an
+  unconfirmed root cause: confidence >= 0.8 and at least 2 evidence items (configurable under
+  `decisions`). Previously one evidence item at any confidence was accepted.
+- `search_runbooks` accepts an optional `incident_id`.
 
 ## [0.1.0] - 2026-10-08
 

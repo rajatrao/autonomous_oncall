@@ -250,7 +250,7 @@ agents:
         tools: [search_runbooks, get_runbook]
       - type: mcp
         ref: observability
-        tools: [get_service_health, get_dependency_health, query_metrics, get_error_signatures]
+        tools: [get_service_health, get_dependency_health, query_metrics, get_error_signatures, verify_recovery]
 
   communications:
     model: fast
@@ -306,6 +306,7 @@ permissions:
     - "list_*"
     - "query_*"
     - "search_*"
+    - "verify_recovery"
     - "update_incident_status"
     - "record_triage"
     - "record_hypotheses"

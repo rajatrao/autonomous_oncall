@@ -197,3 +197,22 @@ def test_health_and_metrics(setup):
     assert c.get("/healthz").json()["status"] == "ok"
     assert c.get("/readyz").status_code == 200
     assert "oncall_events_total" in c.get("/metrics").text
+
+
+def test_decisions_read_model_and_metrics(setup):
+    _, store, _, c = setup
+    c.post("/v1/events", json=make_event(), headers=IN)
+    for agreed, validation in ((True, "ok"), (False, "ok"), (None, "timeout")):
+        store.record_decision({"decision": "runbook_selection", "incident_id": "INC-1", "mode": "shadow",
+                               "strategy": "deterministic", "validation": validation, "agreed": agreed,
+                               "provider": "ollama", "model": "nimble", "latency_ms": 80, "input_tokens": 300,
+                               "applied": {"runbook_id": "a"}, "baseline": {"runbook_id": "a"}})
+    assert c.get("/v1/incidents/INC-1/decisions").status_code == 401
+    rows = c.get("/v1/incidents/INC-1/decisions", headers=READ).json()["decisions"]
+    assert len(rows) == 3 and rows[0]["model"] == "nimble" and rows[0]["applied"] == {"runbook_id": "a"}
+    assert c.get("/v1/incidents/NOPE/decisions", headers=READ).status_code == 404
+    stats = c.get("/v1/decisions", headers=READ).json()["stats"]
+    assert sum(s["n"] for s in stats) == 3
+    text = c.get("/metrics").text
+    assert 'oncall_decision_agreement_ratio{decision="runbook_selection",mode="shadow"} 0.5' in text
+    assert 'oncall_decisions_total{decision="runbook_selection",mode="shadow",strategy="deterministic",validation="timeout"} 1.0' in text

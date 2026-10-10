@@ -26,6 +26,17 @@ x-mcp-env: &mcp-env
   ONCALL_CONFIG: /config/oncall.yaml
   ONCALL_MCP_ALLOWED_HOST: "*"
   ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
+  # Optional decision model (docs/decisions.md); `./scripts/demo.sh jev ...` sets these. Off by default.
+  ONCALL_JEV_ENABLED: ${ONCALL_JEV_ENABLED:-false}
+  ONCALL_JEV_PROVIDER: ${ONCALL_JEV_PROVIDER:-ollama}
+  ONCALL_JEV_URL: ${ONCALL_JEV_URL:-http://host.docker.internal:11434/v1}
+  ONCALL_JEV_MODEL: ${ONCALL_JEV_MODEL:-nimble}
+  ONCALL_JEV_API_KEY: ${ONCALL_JEV_API_KEY:-}
+  ONCALL_JEV_ALLOW_EXTERNAL: ${ONCALL_JEV_ALLOW_EXTERNAL:-false}
+  ONCALL_JEV_MODE: ${ONCALL_JEV_MODE:-shadow}
+  ONCALL_JEV_DECISIONS: ${ONCALL_JEV_DECISIONS:-runbook_selection,diagnosis_category,severity,evidence_sufficiency}
+  ONCALL_JEV_FALLBACK: ${ONCALL_JEV_FALLBACK:-baseline}
+  ONCALL_JEV_TIMEOUT_MS: ${ONCALL_JEV_TIMEOUT_MS:-1500}
 
 services:
   # ------------------------------------------------------------------------------- product
@@ -142,8 +153,6 @@ services:
     build: {context: ., target: scripted-model, args: {PYTHON_IMAGE: "${PYTHON_IMAGE:-python:3.12-slim}"}}
     image: autonomous-oncall/scripted-model:${ONCALL_VERSION:-0.1.0}
     restart: unless-stopped
-    environment:
-      ONCALL_SCRIPTED_SETTLE_SECONDS: "240"
 
   # ---------------------------------------------------------------------------------- demo
   postgres:

@@ -52,6 +52,20 @@ DEFAULTS: dict[str, Any] = {
     "gateway": {"api_token": "", "approver_token": "", "cors_origins": [], "followup_seconds": 120,
                 "max_followups": 30, "poll_interval_seconds": 1.0, "allow_reset": False},
     "mcp": {},
+    # Optional decision model (docs/decisions.md). Off unless enabled; the root-cause thresholds
+    # apply either way.
+    "decisions": {
+        "enabled": False,
+        "provider": {"type": "none", "timeout_ms": 1500, "max_retries": 1, "allow_external": False},
+        "default_mode": "off",
+        "enabled_decisions": [],
+        "fallback": "baseline",
+        "environments": [],
+        "per_decision": {},
+        "llm_fallback": {},
+        "root_cause_min_confidence": 0.8,
+        "root_cause_min_evidence": 2,
+    },
 }
 
 
@@ -99,10 +113,18 @@ def load_config(path: str | os.PathLike | None = None, env: dict[str, str] | Non
         raw = yaml.safe_load(p.read_text()) or {}
     raw = expand_env(raw, env)  # expand first so enums and URLs can come from the environment
     validate_config(raw)
-    return _merge(DEFAULTS, raw)
+    return _checked(_merge(DEFAULTS, raw))
 
 
 def from_dict(raw: dict, env: dict[str, str] | None = None) -> dict:
     raw = expand_env({"config_version": "1", **raw}, env)
     validate_config(raw)
-    return _merge(DEFAULTS, raw)
+    return _checked(_merge(DEFAULTS, raw))
+
+
+def _checked(config: dict) -> dict:
+    """Cross-field checks the JSON Schema cannot express (raises ConfigError)."""
+    from .decisions import DecisionSettings
+
+    DecisionSettings.from_config(config)
+    return config

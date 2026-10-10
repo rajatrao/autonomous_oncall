@@ -113,6 +113,28 @@ remediation:
   feature_flags: {allowed: []}
   max_actions_per_incident: 3
   min_confidence: 0.8               # below this, automatic becomes approval_required
+  # category_actions:               # optional, tighten-only: other mitigations for this diagnosis need approval
+  #   dependency_degradation: [failover, circuit_breaker]
+  #   bad_deployment: [rollback, feature_flag]
+
+# Optional decision model for bounded decisions (docs/decisions.md). Off by default. The root-cause
+# thresholds below apply either way: set_root_cause rejects weaker unconfirmed root causes.
+decisions:
+  enabled: ${ONCALL_JEV_ENABLED:-false}
+  provider:
+    type: ${ONCALL_JEV_PROVIDER:-ollama}       # ollama (local, e.g. nimble) | typesafe (hosted Jev) | systemone
+    url: ${ONCALL_JEV_URL:-http://localhost:11434/v1}
+    model: ${ONCALL_JEV_MODEL:-nimble}
+    api_key: ${ONCALL_JEV_API_KEY:-}            # hosted only
+    allow_external: ${ONCALL_JEV_ALLOW_EXTERNAL:-false}  # required for any non-local endpoint
+    timeout_ms: ${ONCALL_JEV_TIMEOUT_MS:-1500}
+  default_mode: ${ONCALL_JEV_MODE:-shadow}      # off | shadow | active
+  enabled_decisions: ${ONCALL_JEV_DECISIONS:-runbook_selection,diagnosis_category,severity,evidence_sufficiency}
+  fallback: ${ONCALL_JEV_FALLBACK:-baseline}    # baseline | escalate | llm
+  # per_decision:                               # active mode needs a threshold set from shadow data
+  #   runbook_selection: {mode: active, min_confidence: 0.8}
+  root_cause_min_confidence: 0.8
+  root_cause_min_evidence: 2
 
 # One bearer token per MCP server. The agent gets each through ONCALL_<GROUP>_MCP_TOKEN.
 mcp:
