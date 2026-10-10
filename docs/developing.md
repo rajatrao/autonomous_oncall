@@ -88,8 +88,8 @@ Remediation is deliberately hard to extend, because every action is a production
    limits).
 3. Add the typed tool in `src/oncall_mcp/servers/remediation.py` with the `PRODUCTION_CHANGE`
    annotations, and add it to the remediation agent's tool whitelist in the agent source.
-4. Add the category to `autonomy.remediation` and the action to the enums in
-   `schemas/remediation.schema.json` and `schemas/oncall-config.schema.json`.
+4. If the action has a new category, add it to `autonomy.remediation` and to the category enums in
+   `schemas/oncall-config.schema.json`.
 5. Update `tests/test_safety.py::test_remediation_tools_are_exactly_the_typed_actions`; that test is
    meant to fail until you have done all of the above.
 
