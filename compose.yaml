@@ -25,6 +25,8 @@ x-demo: &demo
 x-mcp-env: &mcp-env
   ONCALL_CONFIG: /config/oncall.yaml
   ONCALL_MCP_ALLOWED_HOST: "*"
+  # env (local .env) | vault (set by `oncall-secrets compose`); see docs/secrets.md.
+  ONCALL_SECRETS_SOURCE: ${ONCALL_SECRETS_SOURCE:-env}
   ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
   # Optional decision model (docs/decisions.md); `./scripts/demo.sh jev ...` sets these. Off by default.
   ONCALL_JEV_ENABLED: ${ONCALL_JEV_ENABLED:-false}
@@ -46,6 +48,7 @@ services:
     volumes: ["./demo/config:/config:ro"]
     environment:
       ONCALL_CONFIG: /config/oncall.yaml
+      ONCALL_SECRETS_SOURCE: ${ONCALL_SECRETS_SOURCE:-env}
       ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
       ONCALL_INGEST_TOKEN: ${ONCALL_INGEST_TOKEN:-demo-only-ingest}
       ONCALL_GATEWAY_API_TOKEN: ${ONCALL_GATEWAY_API_TOKEN:-demo-only-read}
@@ -83,9 +86,7 @@ services:
       # Ollama running natively on the host (it has the GPU; Ollama in a container on a Mac does not).
       ONCALL_OLLAMA_URL: ${ONCALL_OLLAMA_URL:-http://host.docker.internal:11434/v1}
       ONCALL_MODEL_BASE_URL: ${ONCALL_MODEL_BASE_URL:-}
-      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY:-}   # Anthropic, OpenAI or gateway key
       ONCALL_SCRIPTED_MODEL_URL: http://scripted-model:7199/v1
       ONCALL_SCRIPTED_MODEL_TOKEN: scripted
       ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp
@@ -157,7 +158,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
+      # Superuser, used only here to create the databases. The services never connect with it.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-only-postgres}
+      # Owner of the incident database only; the gateway and MCP servers connect as this user.
       ONCALL_DB_PASSWORD: ${ONCALL_DB_PASSWORD:-demo-only-oncall-db}
       PAYMENTS_DB_PASSWORD: ${PAYMENTS_DB_PASSWORD:-demo-only-payments-db}
     volumes:

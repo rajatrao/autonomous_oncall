@@ -9,6 +9,14 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 
 ### Added
 
+- One API key variable for every hosted model provider: `ONCALL_MODEL_API_KEY` (Anthropic, OpenAI
+  and OpenAI-compatible). `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are no longer used.
+- Production secrets (docs/secrets.md): `oncall-secrets compose` runs Docker Compose with every
+  secret from HashiCorp Vault or OpenBao (KV version 2) and never reads `.env`; it refuses to start
+  when the vault is unreachable, a required secret is missing, or a secret is set outside the vault.
+  On Kubernetes, secrets come from Kubernetes Secrets (`secretKeyRef`). With
+  `ONCALL_SECRETS_SOURCE=vault` or `kubernetes`, the gateway and MCP servers refuse to start with an
+  empty or `demo-only` credential. `.env` stays the local-development source.
 - Configurable models: provider flavors `anthropic`, `openai`, `openai-compatible`, `dmr` (Docker
   Model Runner) and `ollama`, with model ids from `ONCALL_REASONING_MODEL` and `ONCALL_FAST_MODEL`.
 - Local models in the demo: `./scripts/demo.sh model dmr|ollama|...`, defaulting to Qwen3.6 35B-A3B.

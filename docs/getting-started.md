@@ -138,6 +138,9 @@ services:
   # ...and incident_state, observability, changes, communications, knowledge the same way
 ```
 
+In production, inject these secrets from a vault or Kubernetes Secrets rather than `.env`; see
+[Secrets](secrets.md).
+
 `oncall-mcp <server>` runs one server; ports default to 7101-7106 in the order incident_state,
 observability, changes, remediation, communications, knowledge. `GET /healthz` on each returns its
 MCP interface version.
@@ -157,7 +160,7 @@ Serve the published artifact with the official Docker Agent image and point it a
       - --auth-token=${ONCALL_AGENT_API_TOKEN}
       - --session-db=/data/session.db
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY}   # the model provider's API key
       ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp
       ONCALL_INCIDENT_STATE_MCP_TOKEN: ${ONCALL_INCIDENT_STATE_MCP_TOKEN}
       # ...one URL and one token per capability group

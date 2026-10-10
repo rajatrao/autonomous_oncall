@@ -14,13 +14,16 @@ environment variables, which Docker Agent expands in the
 
 | Flavor | Provider | Variables |
 | --- | --- | --- |
-| *(none)* | Anthropic, `claude-sonnet-5-5` / `claude-haiku-5-5` | `ANTHROPIC_API_KEY` |
-| `anthropic` | Anthropic | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `ANTHROPIC_API_KEY` |
-| `openai` | OpenAI | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `OPENAI_API_KEY` |
+| *(none)* | Anthropic, `claude-sonnet-5-5` / `claude-haiku-5-5` | `ONCALL_MODEL_API_KEY` |
+| `anthropic` | Anthropic | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `ONCALL_MODEL_API_KEY` |
+| `openai` | OpenAI | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `ONCALL_MODEL_API_KEY` |
 | `openai-compatible` | Any OpenAI-compatible server (vLLM, LM Studio, LiteLLM, a gateway) | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `ONCALL_MODEL_BASE_URL`, `ONCALL_MODEL_API_KEY` |
 | `dmr` | [Docker Model Runner](https://docs.docker.com/ai/docker-agent/providers/dmr/) | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`; `MODEL_RUNNER_HOST` when Docker Agent runs in a container |
 | `ollama` | [Ollama](https://docs.docker.com/ai/docker-agent/providers/local/) | `ONCALL_REASONING_MODEL`, `ONCALL_FAST_MODEL`, `ONCALL_OLLAMA_URL` |
 | `scripted-model` | Deterministic test model | `ONCALL_SCRIPTED_MODEL_URL` |
+
+Every hosted provider reads its API key from `ONCALL_MODEL_API_KEY`, so switching provider never
+means renaming a secret.
 
 The variables are required with the provider flavors: Docker Agent reports an unset variable
 instead of falling back to something you did not choose.

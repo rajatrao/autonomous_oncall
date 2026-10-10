@@ -106,11 +106,11 @@ choose_model() {
       ;;
     anthropic)
       flavor=anthropic; reasoning=${reasoning:-claude-sonnet-5-5}; fast=${fast:-claude-haiku-5-5}
-      grep -q '^ANTHROPIC_API_KEY=.' "$ENV_FILE" || echo "Add ANTHROPIC_API_KEY=... to .env" >&2
+      grep -q '^ONCALL_MODEL_API_KEY=.' "$ENV_FILE" || echo "Add ONCALL_MODEL_API_KEY=<Anthropic key> to .env" >&2
       ;;
     openai)
       flavor=openai; reasoning=${reasoning:?give the reasoning model id}; fast=${fast:-$reasoning}
-      grep -q '^OPENAI_API_KEY=.' "$ENV_FILE" || echo "Add OPENAI_API_KEY=... to .env" >&2
+      grep -q '^ONCALL_MODEL_API_KEY=.' "$ENV_FILE" || echo "Add ONCALL_MODEL_API_KEY=<OpenAI key> to .env" >&2
       ;;
     scripted)
       flavor=scripted-model

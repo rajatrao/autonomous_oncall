@@ -46,7 +46,7 @@ hard-coded (see [Choosing models](docs/models.md)):
 ```bash
 ./scripts/demo.sh model dmr        # local: Docker Model Runner, Qwen3.6 35B-A3B (~22 GB, 32 GB Mac)
 ./scripts/demo.sh model ollama     # local: Ollama on your machine, same model
-./scripts/demo.sh model anthropic  # hosted: add ANTHROPIC_API_KEY=... to .env first
+./scripts/demo.sh model anthropic  # hosted: add ONCALL_MODEL_API_KEY=... to .env first
 ./scripts/demo.sh model dmr ai/qwen3.8:27b ai/qwen3.6:35b-a3b   # choose reasoning and fast models
 ```
 
@@ -96,6 +96,7 @@ For people **using** the agent (operators, SREs):
 - [Integrations](docs/integrations.md): the MCP capability groups and the provider contracts
 - [Incident lifecycle](docs/incident-lifecycle.md): states, events, approvals, RCA
 - [Security model](docs/security.md)
+- [Secrets](docs/secrets.md): `.env` locally; a vault (Docker Compose) or Kubernetes Secrets in production
 
 For people **developing** the agent:
 
