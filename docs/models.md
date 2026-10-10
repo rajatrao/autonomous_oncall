@@ -84,6 +84,18 @@ depend on the model being good: remediation is typed and policy-checked whatever
 for, and low-confidence diagnoses are routed to a human. Expect slower incidents and more
 "insufficient evidence, continuing investigation" outcomes on smaller models.
 
+## Nimble
+
+[Nimble](https://ollama.com/library/nimble) (`ollama pull nimble`) is a **decision model**: it answers
+typed questions through Ollama's `/v1/systemone` endpoint (TypeSafe's Jev API), with a probability per
+allowed answer. Use it as the local decision model ([Decision models](decisions.md)), not as the
+`reasoning` or `fast` LLM. Its Ollama page says decision prompts must fit in 8,192 tokens, while the
+agent's LLM roles need a far larger context, multi-step tool calls and structured output. The page also
+lists "tools" and a 256K context, which conflicts with that note; this repository has not tested Nimble
+in the LLM roles. If you want to try it, it is only a model id: `ONCALL_FAST_MODEL=nimble` with the
+`ollama` flavor; benchmark it with your own incidents first
+(`scripts/benchmark_decisions.py --flavor ollama`).
+
 ## How this is tested
 
 `tests/test_agent_behaviour.py::test_provider_flavors_drive_the_same_agent` runs a full incident

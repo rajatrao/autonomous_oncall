@@ -112,6 +112,7 @@ class RemediationPolicy:
         *,
         confidence: float | None = None,
         prior_action_count: int = 0,
+        diagnosis_category: str | None = None,
     ) -> Decision:
         mode = self.mode
         if action not in ACTIONS:
@@ -161,6 +162,11 @@ class RemediationPolicy:
             return Decision(REQUIRE_APPROVAL, "autonomy mode is supervised: a human approves every change", mode)
         if target is not None and _match_any(target, self.rules.get("protected_services", [])):
             return Decision(REQUIRE_APPROVAL, f"service '{target}' is protected", mode)
+        # Optional, tighten-only: an action that does not match the diagnosed cause needs a human.
+        expected = (self.rules.get("category_actions") or {}).get(diagnosis_category or "")
+        if expected is not None and spec.category not in expected:
+            return Decision(REQUIRE_APPROVAL, f"{spec.category} is not an expected mitigation for a "
+                                              f"{diagnosis_category} diagnosis (remediation.category_actions)", mode)
         min_conf = self.rules.get("min_confidence", 0.7)
         if confidence is None or confidence < min_conf:
             return Decision(

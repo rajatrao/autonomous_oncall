@@ -37,4 +37,5 @@ asyncio_mode = "auto"
 markers = [
   "docker_agent: needs the docker-agent binary (skipped when it is not installed)",
   "postgres: needs ONCALL_TEST_POSTGRES_URL",
+  "ollama: needs a local Ollama with a decision model (ONCALL_TEST_OLLAMA_URL)",
 ]

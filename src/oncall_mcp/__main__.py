@@ -17,6 +17,7 @@ from .common import BearerAuth, Context, server_token
 def create_app(server: str, config: dict):
     module = importlib.import_module(f"oncall_mcp.servers.{server}")
     ctx = Context(config)
+    ctx.router  # fail at start-up, not at the first tool call, if the decision model is misconfigured
     mcp = module.build(ctx)
     host = os.environ.get("ONCALL_MCP_ALLOWED_HOST")
     kwargs = {"stateless_http": True, "json_response": True}

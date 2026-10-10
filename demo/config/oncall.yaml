@@ -40,6 +40,7 @@ integrations:
     provider: prometheus
     url: "http://prometheus:9090"
     rate_window: 30s
+    verification: {settle_seconds: 240}   # verify_recovery: how long a fresh mitigation may still be "settling"
   logs:
     provider: loki
     url: "http://loki:3100"
@@ -92,3 +93,15 @@ mcp:
   remediation: {auth_token: "${ONCALL_REMEDIATION_MCP_TOKEN}"}
   communications: {auth_token: "${ONCALL_COMMUNICATIONS_MCP_TOKEN}"}
   knowledge: {auth_token: "${ONCALL_KNOWLEDGE_MCP_TOKEN}"}
+# Optional decision model (docs/decisions.md). ONCALL_JEV_ENABLED=false (the default) keeps every
+# decision on its current path; `./scripts/demo.sh jev local` turns on Nimble through Ollama.
+decisions:
+  enabled: "${ONCALL_JEV_ENABLED:-false}"
+  provider:
+    type: "${ONCALL_JEV_PROVIDER:-ollama}"
+    url: "${ONCALL_JEV_URL:-http://host.docker.internal:11434/v1}"
+    model: "${ONCALL_JEV_MODEL:-nimble}"
+    api_key: "${ONCALL_JEV_API_KEY:-}"
+    timeout_ms: "${ONCALL_JEV_TIMEOUT_MS:-1500}"
+  enabled_decisions: "${ONCALL_JEV_DECISIONS:-}"
+  fallback: "${ONCALL_JEV_FALLBACK:-baseline}"

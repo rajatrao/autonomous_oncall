@@ -13,7 +13,7 @@ MCP interface version: **1.0** (reported by `GET /healthz` on every server). See
 | Group | Default port | Tools | Who uses it |
 | --- | --- | --- | --- |
 | `incident_state` | 7101 | `get_incident`, `list_open_incidents`, `update_incident_status`, `record_triage`, `record_hypotheses`, `set_root_cause`, `append_timeline`, `record_agent_task`, `get_incident_tasks` | Commander (read/write); specialists read |
-| `observability` | 7102 | `get_service_health`, `get_dependency_health`, `query_metrics`, `query_logs`, `get_error_signatures`, `query_traces` | Triage, diagnostics investigators, remediation (verification) |
+| `observability` | 7102 | `get_service_health`, `get_dependency_health`, `query_metrics`, `query_logs`, `get_error_signatures`, `query_traces`, `verify_recovery` | Triage, diagnostics investigators, remediation (verification) |
 | `changes` | 7103 | `get_recent_deployments`, `get_recent_config_changes`, `get_recent_feature_flag_changes` | Change investigator |
 | `remediation` | 7104 | `list_remediation_capabilities`, `get_remediation_status`, `restart_service`, `rollback_deployment`, `scale_service`, `failover_dependency`, `enable_circuit_breaker`, `disable_feature_flag`, `execute_approved_action` | Remediation specialist only |
 | `communications` | 7105 | `create_incident_channel`, `post_incident_update`, `update_incident_channel` | Communications specialist |

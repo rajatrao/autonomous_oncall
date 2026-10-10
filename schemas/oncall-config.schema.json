@@ -395,6 +395,24 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "category_actions": {
+          "type": "object",
+          "description": "Optional, tighten-only: per diagnosis category, the remediation categories that may run without approval. Any other category for that diagnosis requires approval. Categories not listed are unaffected.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "restart",
+                "rollback",
+                "scale",
+                "failover",
+                "circuit_breaker",
+                "feature_flag"
+              ]
+            }
+          }
         }
       },
       "additionalProperties": false
@@ -447,6 +465,340 @@
         "allow_reset": {
           "type": "boolean",
           "description": "Expose POST /v1/admin/reset (demo environments only)."
+        }
+      }
+    },
+    "decisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional decision model (TypeSafe Jev API, also served by Ollama for local models such as Nimble) for bounded decisions made by the MCP servers. Off by default; when enabled it decides; see docs/decisions.md.",
+      "properties": {
+        "enabled": {
+          "description": "true or false (a string is accepted so the value can come from ${VAR}).",
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "true",
+                "false",
+                "True",
+                "False",
+                "1",
+                "0",
+                "yes",
+                "no",
+                ""
+              ]
+            }
+          ]
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "ollama",
+                "typesafe",
+                "systemone",
+                "mock",
+                "none"
+              ],
+              "description": "ollama and typesafe are both /v1/systemone endpoints; systemone is any compatible endpoint; mock is for tests."
+            },
+            "url": {
+              "type": "string",
+              "description": "Base URL; the provider appends /systemone. Ollama: http://localhost:11434/v1. TypeSafe: https://api.typesafe.ai/v1."
+            },
+            "model": {
+              "type": "string",
+              "description": "nimble (Ollama), jev-latest or a pinned jev-1.13.0 (TypeSafe)."
+            },
+            "api_key": {
+              "type": "string",
+              "description": "Reference it as ${ONCALL_JEV_API_KEY}; never inline."
+            },
+            "timeout_ms": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 50,
+                  "maximum": 60000
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                }
+              ]
+            },
+            "max_retries": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 5
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                }
+              ]
+            },
+            "answers": {
+              "type": "object",
+              "description": "mock only"
+            },
+            "fail": {
+              "type": "string",
+              "description": "mock only"
+            }
+          }
+        },
+        "enabled_decisions": {
+          "description": "Decisions the decision model handles, as a list or a comma-separated string. Empty: all of them.",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "runbook_selection",
+                  "diagnosis_category",
+                  "evidence_sufficiency",
+                  "remediation_consistency"
+                ]
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "fallback": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "baseline",
+                "llm",
+                "escalate"
+              ]
+            },
+            {
+              "type": "string",
+              "enum": [
+                ""
+              ]
+            }
+          ]
+        },
+        "environments": {
+          "description": "Only consult the decision model for incidents in these environments (empty: all).",
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "min_confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+            }
+          ],
+          "description": "An answer below this confidence goes to the fallback (default 0.8). Decision-model probabilities are not calibrated accuracy; raise it if the model is wrong too often."
+        },
+        "per_decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runbook_selection": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fallback": {
+                  "type": "string",
+                  "enum": [
+                    "baseline",
+                    "llm",
+                    "escalate"
+                  ]
+                },
+                "min_confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                    }
+                  ],
+                  "description": "Overrides decisions.min_confidence for this decision."
+                }
+              }
+            },
+            "diagnosis_category": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fallback": {
+                  "type": "string",
+                  "enum": [
+                    "baseline",
+                    "llm",
+                    "escalate"
+                  ]
+                },
+                "min_confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                    }
+                  ],
+                  "description": "Overrides decisions.min_confidence for this decision."
+                }
+              }
+            },
+            "evidence_sufficiency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fallback": {
+                  "type": "string",
+                  "enum": [
+                    "baseline",
+                    "llm",
+                    "escalate"
+                  ]
+                },
+                "min_confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                    }
+                  ],
+                  "description": "Overrides decisions.min_confidence for this decision."
+                }
+              }
+            },
+            "remediation_consistency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "fallback": {
+                  "type": "string",
+                  "enum": [
+                    "baseline",
+                    "llm",
+                    "escalate"
+                  ]
+                },
+                "min_confidence": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                    }
+                  ],
+                  "description": "Overrides decisions.min_confidence for this decision."
+                }
+              }
+            }
+          }
+        },
+        "llm_fallback": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "base_url": {
+              "type": "string",
+              "description": "OpenAI-compatible base URL, e.g. http://localhost:11434/v1"
+            },
+            "model": {
+              "type": "string"
+            },
+            "api_key": {
+              "type": "string"
+            },
+            "confidence_when_llm": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "string",
+                  "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+                }
+              ],
+              "description": "Confidence assigned to fallback LLM answers (a chat model gives no probabilities). Required for fallback: llm."
+            }
+          }
+        },
+        "root_cause_min_confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+            }
+          ],
+          "description": "set_root_cause rejects an unconfirmed root cause below this confidence. Applies even when decisions are disabled."
+        },
+        "root_cause_min_evidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 20
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+            }
+          ],
+          "description": "Minimum evidence items for an unconfirmed root cause. Applies even when decisions are disabled."
         }
       }
     }

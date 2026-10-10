@@ -31,3 +31,12 @@ runner:
   concurrency: 4
 gateway:
   followup_seconds: 0
+# Decision model: off unless a test turns it on. The mock provider answers deterministically;
+# ONCALL_JEV_MOCK_FAIL=timeout|unavailable|rejected|garbage simulates a broken provider.
+decisions:
+  enabled: "${ONCALL_JEV_ENABLED:-false}"
+  provider: {type: "${ONCALL_JEV_PROVIDER:-mock}", url: "${ONCALL_JEV_URL:-}", model: "${ONCALL_JEV_MODEL:-}",
+             fail: "${ONCALL_JEV_MOCK_FAIL:-}"}
+  enabled_decisions: "${ONCALL_JEV_DECISIONS:-}"
+  min_confidence: "${ONCALL_JEV_MIN_CONFIDENCE:-}"
+  fallback: "${ONCALL_JEV_FALLBACK:-baseline}"

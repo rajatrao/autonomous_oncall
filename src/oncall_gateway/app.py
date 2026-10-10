@@ -1,7 +1,7 @@
 """Gateway HTTP API (FastAPI).
 
 Ingestion:   POST /v1/events, /v1/adapters/alertmanager, /v1/adapters/pagerduty
-Read model:  GET  /v1/incidents[/{id}[/rca|/audit]], /v1/actions, /v1/tasks
+Read model:  GET  /v1/incidents[/{id}[/rca|/audit|/decisions]], /v1/actions, /v1/tasks, /v1/decisions
 Approvals:   POST /v1/incidents/{id}/actions/{action_id}/approve|reject, POST /v1/incidents/{id}/wake
 Operations:  GET  /healthz, /readyz, /metrics; POST /v1/admin/reset (only when gateway.allow_reset)
 """
@@ -157,6 +157,17 @@ def create_app(config: dict, store: SqlIncidentStore | None = None, runner: Runn
     async def get_audit(incident_id: str):
         return {"audit": await asyncio.to_thread(store.audit_log, incident_id)}
 
+    @app.get("/v1/incidents/{incident_id}/decisions", dependencies=[Depends(read_auth)])
+    async def get_decisions(incident_id: str):
+        """Decision-model calls for one incident: what each path answered and what was applied."""
+        await asyncio.to_thread(store.get_incident, incident_id, False)
+        return {"decisions": await asyncio.to_thread(store.list_decisions, incident_id)}
+
+    @app.get("/v1/decisions", dependencies=[Depends(read_auth)])
+    async def decision_summary():
+        """Counts per decision type, strategy and validation outcome, with agreement and latency."""
+        return {"stats": await asyncio.to_thread(store.decision_stats)}
+
     @app.get("/v1/actions", dependencies=[Depends(read_auth)])
     async def list_actions(status: str | None = "pending_approval"):
         out = []
@@ -236,6 +247,7 @@ def create_app(config: dict, store: SqlIncidentStore | None = None, runner: Runn
         try:
             open_n = len(await asyncio.to_thread(store.list_incidents, "open", 1000))
             metrics.OPEN.set(open_n)
+            _decision_metrics(await asyncio.to_thread(store.decision_stats))
         except StoreUnavailable:
             pass
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -247,6 +259,22 @@ def create_app(config: dict, store: SqlIncidentStore | None = None, runner: Runn
             return {"status": "reset"}
 
     return app
+
+
+def _decision_metrics(stats: list[dict]) -> None:
+    agreement: dict[str, list[float]] = {}
+    for r in stats:
+        metrics.DECISIONS.labels(r["decision"], r["strategy"], r["validation"]).set(r["n"])
+        a = agreement.setdefault(r["decision"], [0, 0, 0.0, 0])
+        a[0] += r["agreed"] or 0
+        a[1] += r["compared"] or 0
+        a[2] += float(r["latency_sum"] or 0)
+        a[3] += r["latency_n"] or 0
+    for decision, (agreed, compared, lat_sum, lat_n) in agreement.items():
+        if compared:
+            metrics.DECISION_AGREEMENT.labels(decision).set(agreed / compared)
+        if lat_n:
+            metrics.DECISION_LATENCY.labels(decision).set(lat_sum / lat_n)
 
 
 async def _json(request: Request):

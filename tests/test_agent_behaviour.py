@@ -167,3 +167,22 @@ def test_approval_required_waits_for_a_human(agent_env):
     run(f"Wake-up: incident_id=TEST-1\nreason: approval\nremediation decision: action_id={action['action_id']} decision=approved")
     assert store.get_incident("TEST-1", full=False)["status"] == "CLOSED"
     assert _actions(store) == [("failover_dependency", "succeeded")]
+
+
+@pytest.mark.parametrize("jev,strategy", [
+    ({"ONCALL_JEV_ENABLED": "true"}, "jev"),
+    ({"ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MOCK_FAIL": "timeout", "ONCALL_JEV_FALLBACK": "escalate"},
+     "deterministic"),
+], ids=["enabled", "provider-down"])
+def test_decision_model_does_not_change_a_correct_incident(agent_env, jev, strategy):
+    """A decision model that agrees, and one that is down, leave the incident exactly as the
+    LLM-only run: same mitigation, same lifecycle. Every decision point is recorded."""
+    store, run = agent_env("dependency_outage", **jev)
+    run()
+    inc = store.get_incident("TEST-1")
+    assert inc["status"] == "CLOSED"
+    assert _actions(store) == [("failover_dependency", "succeeded")]
+    rows = store.list_decisions("TEST-1")
+    assert {r["decision"] for r in rows} >= {"diagnosis_category", "evidence_sufficiency",
+                                             "runbook_selection", "remediation_consistency"}
+    assert all(r["strategy"] == strategy for r in rows)

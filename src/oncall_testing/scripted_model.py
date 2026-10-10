@@ -260,9 +260,6 @@ def commander(cv: Conv) -> dict:
     return say(_summary(inc, status))
 
 
-SETTLE_SECONDS = float(os.environ.get("ONCALL_SCRIPTED_SETTLE_SECONDS", "240"))
-
-
 def _age_seconds(ts: str | None) -> float | None:
     if not ts:
         return None
@@ -486,8 +483,9 @@ def investigator(kind: str):
             return say(json.dumps({"investigator": "dependency", "dependencies": r.get("dependencies", [])}))
         if kind == "history":
             q = f"{svc} {summary.group(1) if summary else ''}"
+            iid = _field(cv.task, "incident_id") or _field(cv.task, "incident")
             if not cv.done("search_runbooks"):
-                return calls(("search_runbooks", {"query": q, "service": svc}),
+                return calls(("search_runbooks", {"query": q, "service": svc, **({"incident_id": iid} if iid else {})}),
                              ("search_historical_incidents", {"query": q, "service": svc}))
             return say(json.dumps({"investigator": "history",
                                    "runbooks": ((cv.last("search_runbooks") or {}).get("result") or {}).get("runbooks", []),
@@ -505,18 +503,15 @@ def remediation(cv: Conv) -> dict:
     svc = inc.get("service")
 
     if mode == "verify":
-        if not cv.done("get_service_health"):
-            return call("get_service_health", service=svc, window_minutes=5)
-        h = cv.last("get_service_health")["result"] or {}
-        err = (h.get("signals") or {}).get("error_rate") or {}
-        thr = err.get("threshold", 0.05)
-        recovered = h.get("status") == "healthy" or (err.get("current") is not None and err["current"] < thr)
-        done = [a for a in inc.get("actions", []) if a.get("status") == "succeeded"]
-        age = _age_seconds(done[-1].get("updated_at")) if done else None
-        settling = not recovered and age is not None and age < SETTLE_SECONDS
-        return say(json.dumps({"recovered": bool(recovered), "settling": settling,
-                               "detail": f"error_rate now {err.get('current')} vs threshold {thr} (peak {err.get('peak')})"
-                                         + (f"; mitigation finished {int(age)}s ago, signals still settling" if settling else "")}))
+        if not cv.done("verify_recovery"):
+            done = [a for a in inc.get("actions", []) if a.get("status") == "succeeded"]
+            args = {"service": svc, "window_minutes": 5}
+            if done:
+                args["mitigation_finished_at"] = done[-1].get("updated_at")
+            return call("verify_recovery", **args)
+        v = cv.last("verify_recovery")["result"] or {}
+        return say(json.dumps({"recovered": bool(v.get("recovered")), "settling": bool(v.get("settling")),
+                               "detail": v.get("detail", "")}))
 
     if mode == "execute_approved":
         if not cv.done("get_remediation_status"):
@@ -540,7 +535,7 @@ def remediation(cv: Conv) -> dict:
     # mitigate
     if not cv.done("list_remediation_capabilities"):
         return calls(("list_remediation_capabilities", {"service": svc}),
-                     ("search_runbooks", {"query": f"{svc} {inc.get('root_cause', '')}", "service": svc}))
+                     ("search_runbooks", {"query": f"{svc} {inc.get('root_cause', '')}", "service": svc, "incident_id": iid}))
     caps = cv.last("list_remediation_capabilities")["result"] or {}
     top = (inc.get("current_hypotheses") or [{}])[0]
     cat, suspect = top.get("category"), top.get("suspect")

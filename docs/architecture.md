@@ -62,6 +62,16 @@ Concurrency happens at two levels: the gateway runs many incidents at once (one 
 time), and inside a run the Commander and Diagnostics use `run_background_agent` /
 `wait_background_agents` so investigators, communications and RCA work in parallel.
 
+## Decision models
+
+Bounded decisions at the MCP servers' boundaries (runbook selection, diagnosis category, evidence
+sufficiency, and a consistency check on automatic remediation) can optionally
+be answered by a decision model such as Nimble on Ollama or TypeSafe's hosted Jev
+(`src/oncall_core/decisions.py`, `decision_points.py`, `src/oncall_integrations/decisions.py`). Off by
+default; when configured, its confident answers decide, it is tighten-only where safety is
+involved, and every answer is recorded. The remediation policy stays authoritative.
+See [Decision models](decisions.md).
+
 ## Why a gateway outside the agent
 
 An LLM session is not a durable queue. The gateway gives at-least-once delivery, idempotency,

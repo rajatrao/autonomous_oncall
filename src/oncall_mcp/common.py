@@ -28,6 +28,7 @@ class Context:
     config: dict
     _store: SqlIncidentStore | None = None
     _providers: dict[str, Any] = field(default_factory=dict)
+    _router: Any = None
 
     @property
     def store(self) -> SqlIncidentStore:
@@ -35,10 +36,56 @@ class Context:
             self._store = SqlIncidentStore.from_config(self.config)
         return self._store
 
+    @property
+    def router(self):
+        """The decision router (oncall_core.decisions). With decisions disabled it has no provider
+        and every decision returns its baseline without any network call."""
+        if self._router is None:
+            from oncall_core.decisions import DecisionRouter, DecisionSettings, DecisionType
+            from oncall_integrations.decisions import OpenAICompatibleDecisionLLM, build_provider
+
+            settings = DecisionSettings.from_config(self.config)
+            provider = llm = None
+            if settings.enabled:
+                provider = build_provider(settings.provider)
+                if settings.llm_fallback.get("base_url"):
+                    llm = OpenAICompatibleDecisionLLM(settings.llm_fallback)
+                log.info("decision model: %r, decisions: %s", provider,
+                         [d.value for d in DecisionType if settings.is_enabled(d)])
+            self._router = DecisionRouter(settings, provider, llm,
+                                          recorder=lambda res: self.store.record_decision(res.to_record()))
+        return self._router
+
     def provider(self, kind: str) -> Any:
         if kind not in self._providers:
             self._providers[kind] = registry.build(kind, self.config["integrations"].get(kind, {"provider": "none"}))
         return self._providers[kind]
+
+
+def decide(ctx: Context, req, interpret, agree=None):
+    """Run one bounded decision through the router. Returns None when that decision is not enabled.
+
+    Never raises: a broken decision path leaves the baseline in place, which is the behaviour the
+    tool had before decision models existed. With fallback `escalate`, a failure
+    also leaves a timeline entry asking a human to look at that decision.
+    """
+    try:
+        router = ctx.router
+        if not router.enabled(req.decision):
+            return None
+        res = router.decide(req, interpret, agree)
+    except Exception:
+        log.exception("decision %s failed; keeping the baseline", getattr(req.decision, "value", req.decision))
+        return None
+    if res.escalate and req.incident_id:
+        try:
+            ctx.store.append_timeline(
+                req.incident_id, "decision_escalation",
+                f"Decision model could not decide {req.decision.value} ({res.fallback_reason}); "
+                "kept the default behaviour. A human may want to review this step.", "decisions")
+        except Exception:
+            log.exception("could not record decision escalation")
+    return res
 
 
 def tool_errors(fn: Callable) -> Callable:

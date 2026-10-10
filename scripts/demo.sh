@@ -12,6 +12,8 @@
 #   ./scripts/demo.sh down             stop and remove containers and volumes
 #   ./scripts/demo.sh model dmr|ollama|anthropic|openai|scripted [REASONING_MODEL] [FAST_MODEL]
 #                                      choose the model (default: scripted, no API key; see docs/models.md)
+#   ./scripts/demo.sh jev local|typesafe|off [MODEL]
+#                                      optional decision model for bounded decisions (docs/decisions.md)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -124,6 +126,37 @@ choose_model() {
   fi
 }
 
+choose_jev() {
+  local where=${1:-} model=${2:-}
+  ensure_env
+  case $where in
+    local)
+      model=${model:-nimble}
+      if command -v ollama >/dev/null; then echo "Pulling $model (Ollama >= 0.35)"; ollama pull "$model"
+      else echo "ollama CLI not found; make sure the Ollama server on this machine has $model (Ollama >= 0.35)." >&2; fi
+      set_env ONCALL_JEV_ENABLED true; set_env ONCALL_JEV_PROVIDER ollama
+      set_env ONCALL_JEV_URL http://host.docker.internal:11434/v1; set_env ONCALL_JEV_MODEL "$model"
+      ;;
+    typesafe)
+      model=${model:-jev-latest}
+      grep -q '^ONCALL_JEV_API_KEY=.' "$ENV_FILE" || echo "Add ONCALL_JEV_API_KEY=... to .env" >&2
+      echo "Incident text will be sent to api.typesafe.ai."
+      set_env ONCALL_JEV_ENABLED true; set_env ONCALL_JEV_PROVIDER typesafe
+      set_env ONCALL_JEV_URL https://api.typesafe.ai/v1; set_env ONCALL_JEV_MODEL "$model"
+      ;;
+    off) set_env ONCALL_JEV_ENABLED false ;;
+    *) echo "usage: $0 jev local|typesafe|off [MODEL]" >&2; exit 1 ;;
+  esac
+  if [[ $where != off ]]; then
+    echo "Decision model: $where ($model)"
+  else
+    echo "Decision model: off"
+  fi
+  if docker compose ps --status running --services 2>/dev/null | grep -q '^mcp-'; then
+    docker compose up -d mcp-incident-state mcp-knowledge mcp-remediation
+  fi
+}
+
 case "${1:-help}" in
   up)
     ensure_env
@@ -152,7 +185,8 @@ MSG
       json '[print("%-22s %-5s %-22s %s" % (i["incident_id"], i["severity"], i["status"], i["summary"])) for i in d["incidents"]] or print("no incidents")'
     ;;
   model) choose_model "${2:-}" "${3:-}" "${4:-}" ;;
+  jev) choose_jev "${2:-}" "${3:-}" "${4:-}" ;;
   approve) decide approve "${2:-}" ;;
   reject) decide reject "${2:-}" ;;
-  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac
