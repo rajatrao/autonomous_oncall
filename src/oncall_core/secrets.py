@@ -31,6 +31,12 @@ REQUIRED = (
 )
 # Needed only for the models and integrations you use.
 OPTIONAL = (
+    # Two Postgres users, both only for the bundled Postgres container (compose.yaml):
+    #   ONCALL_DB_PASSWORD  the `oncall` user, which owns only the incident database; the gateway and
+    #                       MCP servers connect as this user (ONCALL_STATE_URL).
+    #   POSTGRES_PASSWORD   the `postgres` superuser; only the Postgres image uses it, to create the
+    #                       databases (demo/config/postgres-init.sh). The services never connect with it.
+    # With your own managed Postgres, put the `oncall` credentials in ONCALL_STATE_URL instead.
     "ONCALL_DB_PASSWORD", "POSTGRES_PASSWORD", "ONCALL_MODEL_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
     "ONCALL_JEV_API_KEY", "PROMETHEUS_TOKEN", "CHANGES_READ_TOKEN", "GITHUB_DEPLOYMENTS_READ_TOKEN", "OPS_API_TOKEN",
     "SLACK_BOT_TOKEN", "PLATFORM_CHANGES_READ_TOKEN", "PLATFORM_OPS_TOKEN", "PLATFORM_DEPLOY_TOKEN",

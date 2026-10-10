@@ -160,7 +160,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
+      # Superuser, used only here to create the databases. The services never connect with it.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-only-postgres}
+      # Owner of the incident database only; the gateway and MCP servers connect as this user.
       ONCALL_DB_PASSWORD: ${ONCALL_DB_PASSWORD:-demo-only-oncall-db}
       PAYMENTS_DB_PASSWORD: ${PAYMENTS_DB_PASSWORD:-demo-only-payments-db}
     volumes:
