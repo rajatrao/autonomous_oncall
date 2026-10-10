@@ -39,6 +39,11 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
   `decisions`). Previously one evidence item at any confidence was accepted.
 - `search_runbooks` accepts an optional `incident_id`.
 
+### Removed
+
+- The `docker-agent-exec` runner and its `runner.binary`, `runner.agent_ref`, `runner.flavors` and
+  `runner.extra_args` settings. The gateway reaches the agent only through `docker-agent-api`.
+
 ## [0.1.0] - 2026-10-08
 
 First proof of concept.

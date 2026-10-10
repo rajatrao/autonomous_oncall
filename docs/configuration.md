@@ -91,7 +91,7 @@ diagnosis category to the remediation categories that may run without approval.
 
 ```yaml
 runner:
-  type: docker-agent-api          # or docker-agent-exec, or none (store and queue only)
+  type: docker-agent-api          # or none (store and queue only)
   api_url: http://docker-agent:8080
   api_token: ${ONCALL_AGENT_API_TOKEN}
   agent_id: auto                  # ask the server; or the config file name without .yaml
@@ -102,10 +102,7 @@ runner:
   concurrency: 4                  # incidents handled in parallel
 ```
 
-For `docker-agent-exec`: `binary` (`docker-agent` or `docker agent`), `agent_ref` (file or OCI
-reference), `flavors`, `extra_args`.
-
-How the two runners behave, and how to choose: [Runners](runners.md).
+How the runner behaves: [Runners](runners.md).
 
 ## Ingestion
 

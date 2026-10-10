@@ -19,12 +19,8 @@ remediation:
   min_confidence: 0.8
 runner:
   type: "${ONCALL_RUNNER:-none}"
-  agent_ref: "${ONCALL_AGENT_REF:-dist/oncall-agent.yaml}"
   api_url: "${ONCALL_AGENT_API:-http://127.0.0.1:8080}"
   agent_id: oncall-agent
-  binary: "${ONCALL_DOCKER_AGENT:-docker-agent}"
-  flavors: [scripted-model]
-  extra_args: ["--data-dir", "${ONCALL_DA_DATA:-/tmp/da-data}"]
   timeout_seconds: 600
   max_attempts: 3
   retry_backoff_seconds: 1

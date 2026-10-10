@@ -29,7 +29,7 @@ ingestion:
 
 # How the gateway wakes the agent for an incident.
 runner:
-  type: docker-agent-api            # docker-agent-api | docker-agent-exec | none (store only)
+  type: docker-agent-api            # docker-agent-api | none (store only)
   api_url: http://docker-agent:8080 # `docker agent serve api <ref> --auth-token ...`
   api_token: ${ONCALL_AGENT_API_TOKEN}
   agent_id: auto                    # auto = ask the server; else the agent file name without .yaml
@@ -38,9 +38,6 @@ runner:
   max_attempts: 3                   # then the task is dead-lettered and visible in /v1/tasks
   retry_backoff_seconds: 10         # exponential
   concurrency: 4                    # incidents handled at the same time (one run per incident)
-  # For docker-agent-exec instead:
-  # binary: docker agent
-  # agent_ref: docker.io/<org>/oncall-agent:0.1.0
 
 gateway:
   api_token: ${ONCALL_GATEWAY_API_TOKEN}            # read incidents, RCA, audit

@@ -112,7 +112,6 @@
           "type": "string",
           "enum": [
             "docker-agent-api",
-            "docker-agent-exec",
             "none"
           ]
         },
@@ -125,19 +124,6 @@
         "agent_id": {
           "type": "string",
           "description": "Agent identifier on the API server: the config filename without extension."
-        },
-        "agent_ref": {
-          "type": "string",
-          "description": "For docker-agent-exec: local file, OCI reference or alias."
-        },
-        "binary": {
-          "type": "string"
-        },
-        "flavors": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         },
         "safety": {
           "type": "string",
@@ -163,13 +149,6 @@
         "wake_agent": {
           "type": "string",
           "description": "Named agent to run (default: the root agent)."
-        },
-        "extra_args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Extra docker-agent run arguments for docker-agent-exec (for example --data-dir)."
         },
         "retry_backoff_seconds": {
           "type": "number",

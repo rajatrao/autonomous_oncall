@@ -7,8 +7,8 @@
  Alertmanager ─►│ gateway                                                               │
  PagerDuty    ─►│  webhook / adapters ─┐                                                │
  any source   ─►│  queue (optional) ───┴► Ingestor ─► state store ◄── worker ── runner ─┼─► Docker Agent
-                │                         (validate,  (incidents,     (claim,   (API or │   (serve api / run --exec)
-                │                          dedupe)     events, tasks,  retry,    exec)  │        │
+                │                         (validate,  (incidents,     (claim,   (HTTP)  │   (serve api)
+                │                          dedupe)     events, tasks,  retry,    API)   │        │
                 │  approvals API ─────────────────────► actions, RCA,  dead-                │        │ MCP (streamable HTTP,
                 │                                        audit)        letter)            │        │ bearer token per server)
                 │                                          ▲                              │        ▼
@@ -26,13 +26,11 @@ claims tasks with a lease, runs the agent through a *runner*, and retries with e
 before dead-lettering. It also hosts the approvals API. The gateway is stateless; all state is in
 the store, so you can run several replicas against Postgres (`FOR UPDATE SKIP LOCKED`).
 
-**Docker Agent** runs the agent team defined in `dist/oncall-agent.yaml`. Two runners are supported,
-both documented Docker Agent entry points:
-- `docker-agent-api`: the gateway creates a session with `POST /api/sessions` and runs the root agent
-  with `POST /api/sessions/:id/agent/:agent` (SSE) on a `docker agent serve api` server.
-- `docker-agent-exec`: the gateway runs `docker agent run --exec --json --session <id> <agent> <message>`.
+**Docker Agent** runs the agent team defined in `dist/oncall-agent.yaml` as a
+`docker agent serve api` server. The gateway's runner creates a session with `POST /api/sessions`
+and runs the root agent with `POST /api/sessions/:id/agent/:agent` (SSE).
 
-When each runner is called, how runs are scheduled, retried and judged: [Runners](runners.md).
+When the runner is called, how runs are scheduled, retried and judged: [Runners](runners.md).
 
 The wake-up message contains only the incident id, the reason and the events since the last run.
 Everything else the agent reads from durable state through tools, so a crashed run can be resumed
