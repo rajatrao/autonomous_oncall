@@ -94,7 +94,7 @@ mcp:
   communications: {auth_token: "${ONCALL_COMMUNICATIONS_MCP_TOKEN}"}
   knowledge: {auth_token: "${ONCALL_KNOWLEDGE_MCP_TOKEN}"}
 # Optional decision model (docs/decisions.md). ONCALL_JEV_ENABLED=false (the default) keeps every
-# decision on its current path; `./scripts/demo.sh jev local` turns on Nimble through Ollama in shadow mode.
+# decision on its current path; `./scripts/demo.sh jev local` turns on Nimble through Ollama.
 decisions:
   enabled: "${ONCALL_JEV_ENABLED:-false}"
   provider:
@@ -102,8 +102,6 @@ decisions:
     url: "${ONCALL_JEV_URL:-http://host.docker.internal:11434/v1}"
     model: "${ONCALL_JEV_MODEL:-nimble}"
     api_key: "${ONCALL_JEV_API_KEY:-}"
-    allow_external: "${ONCALL_JEV_ALLOW_EXTERNAL:-false}"
     timeout_ms: "${ONCALL_JEV_TIMEOUT_MS:-1500}"
-  default_mode: "${ONCALL_JEV_MODE:-shadow}"
-  enabled_decisions: "${ONCALL_JEV_DECISIONS:-runbook_selection,diagnosis_category,severity,evidence_sufficiency}"
+  enabled_decisions: "${ONCALL_JEV_DECISIONS:-}"
   fallback: "${ONCALL_JEV_FALLBACK:-baseline}"

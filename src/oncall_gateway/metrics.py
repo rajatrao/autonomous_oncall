@@ -11,7 +11,7 @@ OPEN = Gauge("oncall_open_incidents", "Open incidents")
 # Decision-model calls (docs/decisions.md), read from the decisions table at scrape time so every
 # MCP server's decisions are counted in one place.
 DECISIONS = Gauge("oncall_decisions_total", "Decision-model calls recorded",
-                  ["decision", "mode", "strategy", "validation"])
+                  ["decision", "strategy", "validation"])
 DECISION_AGREEMENT = Gauge("oncall_decision_agreement_ratio",
-                           "Share of decision-model answers that matched the baseline", ["decision", "mode"])
-DECISION_LATENCY = Gauge("oncall_decision_latency_avg_ms", "Average decision-model latency", ["decision", "mode"])
+                           "Share of decision-model answers that matched the baseline", ["decision"])
+DECISION_LATENCY = Gauge("oncall_decision_latency_avg_ms", "Average decision-model latency", ["decision"])

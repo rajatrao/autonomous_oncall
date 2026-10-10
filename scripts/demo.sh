@@ -12,7 +12,7 @@
 #   ./scripts/demo.sh down             stop and remove containers and volumes
 #   ./scripts/demo.sh model dmr|ollama|anthropic|openai|scripted [REASONING_MODEL] [FAST_MODEL]
 #                                      choose the model (default: scripted, no API key; see docs/models.md)
-#   ./scripts/demo.sh jev local|typesafe|off [shadow|active] [MODEL]
+#   ./scripts/demo.sh jev local|typesafe|off [MODEL]
 #                                      optional decision model for bounded decisions (docs/decisions.md)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -127,7 +127,7 @@ choose_model() {
 }
 
 choose_jev() {
-  local where=${1:-} mode=${2:-shadow} model=${3:-}
+  local where=${1:-} model=${2:-}
   ensure_env
   case $where in
     local)
@@ -136,27 +136,19 @@ choose_jev() {
       else echo "ollama CLI not found; make sure the Ollama server on this machine has $model (Ollama >= 0.35)." >&2; fi
       set_env ONCALL_JEV_ENABLED true; set_env ONCALL_JEV_PROVIDER ollama
       set_env ONCALL_JEV_URL http://host.docker.internal:11434/v1; set_env ONCALL_JEV_MODEL "$model"
-      set_env ONCALL_JEV_ALLOW_EXTERNAL false
       ;;
     typesafe)
       model=${model:-jev-latest}
       grep -q '^ONCALL_JEV_API_KEY=.' "$ENV_FILE" || echo "Add ONCALL_JEV_API_KEY=... to .env" >&2
-      echo "Incident text will be sent to api.typesafe.ai (ONCALL_JEV_ALLOW_EXTERNAL=true)."
+      echo "Incident text will be sent to api.typesafe.ai."
       set_env ONCALL_JEV_ENABLED true; set_env ONCALL_JEV_PROVIDER typesafe
       set_env ONCALL_JEV_URL https://api.typesafe.ai/v1; set_env ONCALL_JEV_MODEL "$model"
-      set_env ONCALL_JEV_ALLOW_EXTERNAL true
       ;;
     off) set_env ONCALL_JEV_ENABLED false ;;
-    *) echo "usage: $0 jev local|typesafe|off [shadow|active] [MODEL]" >&2; exit 1 ;;
+    *) echo "usage: $0 jev local|typesafe|off [MODEL]" >&2; exit 1 ;;
   esac
   if [[ $where != off ]]; then
-    [[ $mode == shadow || $mode == active ]] || { echo "mode must be shadow or active" >&2; exit 1; }
-    if [[ $mode == active ]]; then
-      echo "Active mode needs per-decision min_confidence in demo/config/oncall.yaml (decisions.per_decision);" >&2
-      echo "set it from shadow-mode data first. See docs/decisions.md." >&2
-    fi
-    set_env ONCALL_JEV_MODE "$mode"
-    echo "Decision model: $where ($model), $mode mode"
+    echo "Decision model: $where ($model)"
   else
     echo "Decision model: off"
   fi

@@ -4,9 +4,8 @@
 Runs each scenario (tests/fixtures/<name>.yaml) through the real docker-agent binary with the MCP
 servers in-process, once per configuration:
 
-  llm-only   decisions disabled (the current behaviour)
-  shadow     the decision model is asked and recorded; nothing it says changes the workflow
-  active     selected decisions are controlled by the decision model above --min-confidence
+  llm-only   decision model disabled (the agent's LLM and the deterministic rules decide)
+  jev        decision model enabled: its answers above --min-confidence control those decisions
 
 and prints, per scenario and configuration: outcome vs the expected outcome, actions, duration,
 tool calls, model turns and tokens (when the runtime reports them), escalations, denied actions,
@@ -54,9 +53,7 @@ def configs(args) -> dict[str, dict[str, str]]:
     if args.jev_mock_fail:
         base["ONCALL_JEV_MOCK_FAIL"] = args.jev_mock_fail
     out = {"llm-only": {"ONCALL_JEV_ENABLED": "false"},
-           "shadow": {**base, "ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MODE": "shadow"},
-           "active": {**base, "ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MODE": "active",
-                      "ONCALL_JEV_MIN_CONFIDENCE": str(args.min_confidence)}}
+           "jev": {**base, "ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MIN_CONFIDENCE": str(args.min_confidence)}}
     return {k: v for k, v in out.items() if k in args.configs}
 
 
@@ -87,17 +84,17 @@ def summarize(res, expected: dict) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--scenarios", nargs="+", default=list(EXPECTED), choices=list(EXPECTED))
-    ap.add_argument("--configs", nargs="+", default=["llm-only", "shadow", "active"],
-                    choices=["llm-only", "shadow", "active"])
+    ap.add_argument("--configs", nargs="+", default=["llm-only", "jev"],
+                    choices=["llm-only", "jev"])
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--flavor", default="scripted-model")
     ap.add_argument("--jev-provider", default="mock", choices=["mock", "ollama", "typesafe", "systemone"])
     ap.add_argument("--jev-url")
     ap.add_argument("--jev-model")
     ap.add_argument("--jev-mock-fail", choices=["timeout", "unavailable", "rejected", "garbage"])
-    ap.add_argument("--decisions", default="runbook_selection,diagnosis_category,severity,evidence_sufficiency")
-    ap.add_argument("--min-confidence", type=float, default=0.85,
-                    help="active-mode threshold for every active decision (set it from shadow data)")
+    ap.add_argument("--decisions", default="", help="comma-separated decisions to hand over (default: all)")
+    ap.add_argument("--min-confidence", type=float, default=0.8,
+                    help="confidence below which the fallback decides")
     ap.add_argument("--json", action="store_true", help="print one JSON object per run instead of a table")
     args = ap.parse_args()
 
@@ -107,8 +104,6 @@ def main() -> int:
         return 2
     if args.jev_provider in ("typesafe", "systemone") and not os.environ.get("ONCALL_JEV_API_KEY"):
         print("note: ONCALL_JEV_API_KEY is not set", file=sys.stderr)
-    if args.jev_provider == "typesafe":
-        os.environ.setdefault("ONCALL_JEV_ALLOW_EXTERNAL", "true")  # explicit: you asked for the hosted API
 
     rows = []
     for scenario in args.scenarios:

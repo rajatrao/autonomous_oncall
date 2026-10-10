@@ -6,12 +6,11 @@ which diagnosis category, is the evidence sufficient, ...). Every decision point
 *baseline* first (what the code or the LLM decided before this module existed), so turning the
 decision model off, or the model failing, always leaves the current behaviour in place.
 
-Modes, per decision type:
-  off     the decision model is not called.
-  shadow  it is called and recorded for evaluation; the baseline controls the workflow.
-  active  a valid answer above the configured confidence controls the workflow.
-Tighten-only decisions (evidence_sufficiency, remediation_consistency) can only make the system
-more conservative in active mode: reject a root cause, or send an action to a human. A decision
+When decision models are enabled, each enabled decision is handed to the decision model and a
+valid answer at or above that decision's confidence threshold controls the workflow; anything else
+goes to the configured fallback. Tighten-only decisions (evidence_sufficiency,
+remediation_consistency) can only make the system more conservative: reject a root cause, or send
+an action to a human. A decision
 model never grants approval, never executes anything and never loosens the remediation policy.
 
 The decision-model wire format is TypeSafe's Jev API (POST <url>/systemone), which Ollama also
@@ -31,23 +30,19 @@ log = logging.getLogger(__name__)
 class DecisionType(str, Enum):
     RUNBOOK_SELECTION = "runbook_selection"
     DIAGNOSIS_CATEGORY = "diagnosis_category"
-    SEVERITY = "severity"
     EVIDENCE_SUFFICIENCY = "evidence_sufficiency"
     REMEDIATION_CONSISTENCY = "remediation_consistency"
 
 
-# Decisions whose active mode may only make the outcome more conservative.
+# Decisions whose answer may only make the outcome more conservative.
 TIGHTEN_ONLY = {DecisionType.EVIDENCE_SUFFICIENCY, DecisionType.REMEDIATION_CONSISTENCY}
-# Decisions that may never be active (the LLM's answer stays authoritative).
-SHADOW_ONLY = {DecisionType.SEVERITY}
 
-MODES = ("off", "shadow", "active")
+DEFAULT_MIN_CONFIDENCE = 0.8
 FALLBACKS = ("baseline", "llm", "escalate")
-QuestionKind = Literal["choice", "noul", "score"]
+QuestionKind = Literal["choice", "noul"]
 
 # Limits accepted by both Ollama's and TypeSafe's /v1/systemone (the stricter of the two).
 MAX_CHOICE_OPTIONS = 26
-MAX_SCORE_LEVELS = 10
 MAX_QUESTIONS = 64
 PROBABILITY_TOLERANCE = 0.02
 
@@ -72,9 +67,8 @@ class DecisionInvalid(ValueError):
 class Question:
     kind: QuestionKind
     instructions: str
-    # choice: {option_key: description or None}; score: ordered level descriptions; noul: optional
-    # {"true": ..., "false": ...}.
-    criteria: dict[str, str | None] | list[str] | None = None
+    # choice: {option_key: description or None}; noul: optional {"true": ..., "false": ...}.
+    criteria: dict[str, str | None] | None = None
 
     def to_wire(self) -> dict:
         out: dict[str, Any] = {"type": self.kind, "instructions": self.instructions}
@@ -85,24 +79,18 @@ class Question:
     def allowed(self) -> set[str]:
         if self.kind == "choice":
             return set(self.criteria or {})
-        if self.kind == "score":
-            return {str(i) for i in range(len(self.criteria or []))}
         return {"true", "false"}
 
 
 @dataclass(frozen=True)
 class Answer:
     kind: QuestionKind
-    value: Any                      # choice: option key; noul: probability of true; score: weighted level
+    value: Any                      # choice: option key; noul: probability of true
     probabilities: dict[str, float] | None = None
     confidence: float | None = None  # None when the provider gives none (always for noul)
-    level: int | None = None         # score only: most probable level index
 
     def to_dict(self) -> dict:
-        d = {"kind": self.kind, "value": self.value, "probabilities": self.probabilities, "confidence": self.confidence}
-        if self.level is not None:
-            d["level"] = self.level
-        return d
+        return {"kind": self.kind, "value": self.value, "probabilities": self.probabilities, "confidence": self.confidence}
 
 
 @dataclass
@@ -124,7 +112,7 @@ class DecisionRequest:
     decision: DecisionType
     questions: dict[str, Question]
     state: Any                       # structured, size-capped context. Untrusted data, never instructions.
-    baseline: dict[str, Any]         # what the code or LLM decided; used for fallback and shadow comparison
+    baseline: dict[str, Any]         # what the code or LLM decided; used for fallback and the agreement record
     incident_id: str | None = None
     environment: str | None = None
     correlation_id: str | None = None
@@ -134,7 +122,6 @@ class DecisionRequest:
 @dataclass
 class DecisionResult:
     decision: DecisionType
-    mode: str
     strategy: str                    # what controlled the workflow: deterministic | jev | llm
     applied: dict[str, Any]
     baseline: dict[str, Any]
@@ -154,11 +141,11 @@ class DecisionResult:
     @property
     def active(self) -> bool:
         """True when the decision model's answer controls the workflow."""
-        return self.strategy in ("jev", "llm") and self.mode == "active"
+        return self.strategy in ("jev", "llm")
 
     def to_record(self) -> dict:
         return {
-            "decision": self.decision.value, "incident_id": self.incident_id, "mode": self.mode,
+            "decision": self.decision.value, "incident_id": self.incident_id,
             "strategy": self.strategy, "validation": self.validation, "applied": self.applied,
             "baseline": self.baseline, "answers": {k: a.to_dict() for k, a in (self.answers or {}).items()},
             "agreed": self.agreed, "provider": self.provider, "model": self.model, "latency_ms": self.latency_ms,
@@ -190,12 +177,12 @@ def _num(v: Any, default: float | None) -> float | None:
 class DecisionSettings:
     enabled: bool = False
     provider: dict = field(default_factory=dict)
-    default_mode: str = "off"
     enabled_decisions: tuple[str, ...] = ()
     fallback: str = "baseline"
     environments: tuple[str, ...] = ()
     per_decision: dict = field(default_factory=dict)
     llm_fallback: dict = field(default_factory=dict)
+    min_confidence_default: float = DEFAULT_MIN_CONFIDENCE
     timeout_s: float = 1.5
     max_retries: int = 1
     root_cause_min_confidence: float = 0.8
@@ -211,20 +198,18 @@ class DecisionSettings:
         s = cls(
             enabled=_bool(raw.get("enabled", False)),
             provider=prov,
-            default_mode=str(raw.get("default_mode") or "off"),
             enabled_decisions=tuple(_list(raw.get("enabled_decisions"))),
             fallback=str(raw.get("fallback") or "baseline"),
             environments=tuple(_list(raw.get("environments"))),
             per_decision=dict(raw.get("per_decision") or {}),
             llm_fallback=dict(raw.get("llm_fallback") or {}),
+            min_confidence_default=float(_num(raw.get("min_confidence"), DEFAULT_MIN_CONFIDENCE)),
             timeout_s=(_num(prov.get("timeout_ms"), 1500.0) or 1500.0) / 1000.0,
             max_retries=int(_num(prov.get("max_retries"), 1) or 0),
             root_cause_min_confidence=float(_num(raw.get("root_cause_min_confidence"), 0.8)),
             root_cause_min_evidence=int(_num(raw.get("root_cause_min_evidence"), 2)),
         )
         problems = []
-        if s.default_mode not in MODES:
-            problems.append(f"decisions.default_mode must be one of {MODES}")
         if s.fallback not in FALLBACKS:
             problems.append(f"decisions.fallback must be one of {FALLBACKS}")
         known = {d.value for d in DecisionType}
@@ -238,14 +223,9 @@ class DecisionSettings:
             for d in DecisionType:
                 if not s.is_enabled(d):
                     continue
-                mode, fb, thr = s.mode(d), s.fallback_for(d), s.min_confidence(d)
-                if mode not in MODES:
-                    problems.append(f"decisions.per_decision.{d.value}.mode must be one of {MODES}")
-                if mode == "active" and d in SHADOW_ONLY:
-                    problems.append(f"decisions: {d.value} can only run in shadow mode")
-                if mode == "active" and thr is None:
-                    problems.append(f"decisions.per_decision.{d.value}.min_confidence is required in active mode "
-                                    "(set it from shadow-mode data; there is no default)")
+                fb, thr = s.fallback_for(d), s.min_confidence(d)
+                if not 0.0 <= thr <= 1.0:
+                    problems.append(f"decisions: min_confidence for {d.value} must be between 0 and 1")
                 if fb not in FALLBACKS:
                     problems.append(f"decisions.per_decision.{d.value}.fallback must be one of {FALLBACKS}")
                 if fb == "llm" and not (s.llm_fallback.get("base_url") and s.llm_fallback.get("model")
@@ -262,25 +242,14 @@ class DecisionSettings:
         return dict(self.per_decision.get(d.value) or {})
 
     def is_enabled(self, d: DecisionType) -> bool:
-        if not self.enabled:
-            return False
-        if d.value in self.per_decision and "mode" in self._over(d):
-            return self._over(d)["mode"] != "off"
-        return d.value in self.enabled_decisions
-
-    def mode(self, d: DecisionType) -> str:
-        if not self.is_enabled(d):
-            return "off"
-        explicit = self._over(d).get("mode")
-        if not explicit and d in SHADOW_ONLY and self.default_mode == "active":
-            return "shadow"  # a default never makes a shadow-only decision active; an explicit setting is an error
-        return str(explicit or self.default_mode)
+        """Enabled decision models handle every decision unless enabled_decisions narrows the list."""
+        return self.enabled and (not self.enabled_decisions or d.value in self.enabled_decisions)
 
     def fallback_for(self, d: DecisionType) -> str:
         return str(self._over(d).get("fallback") or self.fallback)
 
-    def min_confidence(self, d: DecisionType) -> float | None:
-        return _num(self._over(d).get("min_confidence"), None)
+    def min_confidence(self, d: DecisionType) -> float:
+        return float(_num(self._over(d).get("min_confidence"), self.min_confidence_default))
 
     def applies_to(self, environment: str | None) -> bool:
         return not self.environments or (environment or "") in self.environments
@@ -331,16 +300,8 @@ def validate_answers(questions: dict[str, Question], raw: Any) -> dict[str, Answ
                 raise DecisionInvalid("illegal_choice", f"{what}.choice {choice!r} is not one of the offered options")
             probs = _probabilities(a.get("probabilities"), q.allowed(), what)
             out[key] = Answer("choice", choice, probs, conf)
-        elif q.kind == "noul":
-            out[key] = Answer("noul", _prob(a.get("noul"), f"{what}.noul"), None, None)
         else:
-            levels = len(q.criteria or [])
-            score = a.get("score")
-            if isinstance(score, bool) or not isinstance(score, (int, float)) or not 0 <= score <= levels - 1:
-                raise DecisionInvalid("schema_error", f"{what}.score is not within the {levels} offered levels")
-            probs = _probabilities(a.get("probabilities"), q.allowed(), what)
-            level = int(max(probs, key=lambda k: probs[k]))
-            out[key] = Answer("score", float(score), probs, conf, level)
+            out[key] = Answer("noul", _prob(a.get("noul"), f"{what}.noul"), None, None)
     return out
 
 
@@ -350,12 +311,6 @@ def answer_confidence(a: Answer) -> float | None:
     if a.kind == "noul":
         return max(a.value, 1 - a.value)
     return a.confidence
-
-
-def answer_value(a: Answer) -> Any:
-    if a.kind == "score":
-        return a.level
-    return a.value
 
 
 # -------------------------------------------------------------------------------- router
@@ -373,8 +328,8 @@ class DecisionRouter:
         self.llm = llm
         self.recorder = recorder
 
-    def mode(self, d: DecisionType) -> str:
-        return self.settings.mode(d)
+    def enabled(self, d: DecisionType) -> bool:
+        return self.settings.is_enabled(d)
 
     def decide(self, req: DecisionRequest, interpret: Interpret,
                agree: Callable[[dict[str, Any], dict[str, Any]], bool] | None = None) -> DecisionResult:
@@ -382,10 +337,9 @@ class DecisionRouter:
         baseline). For tighten-only decisions it must only ever return something at least as
         conservative as the baseline; the caller enforces that again when applying."""
         s = self.settings
-        mode = s.mode(req.decision)
-        res = DecisionResult(req.decision, mode, "deterministic", dict(req.baseline), dict(req.baseline), "disabled",
+        res = DecisionResult(req.decision, "deterministic", dict(req.baseline), dict(req.baseline), "disabled",
                              incident_id=req.incident_id, correlation_id=req.correlation_id)
-        if mode == "off" or self.provider is None:
+        if not s.is_enabled(req.decision) or self.provider is None:
             return res  # nothing to record: the decision model was not involved
         if not s.applies_to(req.environment):
             res.validation = "skipped_env"
@@ -399,14 +353,12 @@ class DecisionRouter:
             res.answers = answers
             proposed = interpret(answers)
             res.agreed = (agree or _default_agree)(proposed, req.baseline)
-            if mode == "shadow":
-                res.fallback_reason = None
-            elif _confident(answers, req.primary, threshold):
+            if _confident(answers, req.primary, threshold):
                 res.strategy, res.applied = "jev", proposed
             else:
                 res.validation = "low_confidence"
                 err = f"confidence below {threshold}"
-        if res.strategy == "deterministic" and mode == "active" and res.validation != "ok":
+        if res.strategy == "deterministic" and res.validation != "ok":
             self._fallback(req, res, err or res.validation, interpret, threshold)
         self._record(res)
         return res
@@ -441,14 +393,14 @@ class DecisionRouter:
         return None, last[0], last[1]
 
     def _fallback(self, req: DecisionRequest, res: DecisionResult, reason: str, interpret: Interpret,
-                  threshold: float | None) -> None:
+                  threshold: float) -> None:
         strategy = self.settings.fallback_for(req.decision)
         res.fallback_reason = f"{res.validation}: {reason}"
         if strategy == "escalate":
             res.escalate = True
             return
         if strategy == "llm" and self.llm is not None:
-            sub = DecisionResult(req.decision, res.mode, "deterministic", res.baseline, res.baseline, "disabled")
+            sub = DecisionResult(req.decision, "deterministic", res.baseline, res.baseline, "disabled")
             answers, validation, _ = self._ask(self.llm, req, sub)
             if answers is not None and _confident(answers, req.primary, threshold):
                 res.strategy, res.applied = "llm", interpret(answers)
@@ -469,9 +421,7 @@ def _default_agree(proposed: dict, baseline: dict) -> bool:
     return proposed == baseline
 
 
-def _confident(answers: dict[str, Answer], primary: str | None, threshold: float | None) -> bool:
-    if threshold is None:
-        return False
+def _confident(answers: dict[str, Answer], primary: str | None, threshold: float) -> bool:
     keys = [primary] if primary else list(answers)
     for k in keys:
         c = answer_confidence(answers[k])

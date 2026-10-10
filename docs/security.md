@@ -34,9 +34,9 @@ outside the model, in layers.
 8. **Decision models are advisory or tighten-only.** An optional decision model
    ([decisions.md](decisions.md)) can reorder runbook search results, relabel a diagnosis category,
    reject a weakly evidenced root cause, or send an automatic action to a human. It cannot approve,
-   execute, or loosen the policy, and its answers are validated enum values. Endpoints that are not
-   local or private are refused unless `decisions.provider.allow_external: true`, so incident data
-   does not leave your network unless you configure it to.
+   execute, or loosen the policy, and its answers are validated enum values. It is off by default and
+   sends incident context only to the URL you configure, so data leaves your network only if you
+   point it at a hosted endpoint.
 
 ## Credentials
 

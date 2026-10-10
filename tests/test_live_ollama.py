@@ -20,15 +20,13 @@ INCIDENT = {"incident_id": "LIVE-1", "service": "checkout-api", "environment": "
             "summary": "Checkout errors elevated"}
 
 
-def test_every_question_type_round_trips():
+def test_decision_points_round_trip():
     provider = SystemOneProvider({"type": "ollama", "url": URL, "model": MODEL})
     for req, _ in (
         dp.diagnosis_category(INCIDENT, {"hypothesis": "geo-provider-a returns 503s", "suspect": "geo-provider-a",
                                          "evidence": ["get_dependency_health: geo-provider-a error_rate 0.97 since 15:01",
                                                       "get_error_signatures: new 'upstream geo-provider-a returned 503'"]}),
         dp.evidence_sufficiency(INCIDENT, "geo-provider-a outage", 0.9, ["dependency error rate 0.97", "new 503 signature"]),
-        dp.severity(INCIDENT, {"impact": "41% of checkout requests fail", "scope": "all regions",
-                               "initial_symptoms": ["5xx ratio 0.41"]}),
     ):
         out = provider.evaluate(req.state, req.questions, timeout_s=30)
         answers = validate_answers(req.questions, out.answers)

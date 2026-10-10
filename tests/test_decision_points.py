@@ -1,4 +1,4 @@
-"""Decision points inside the MCP servers: baseline behaviour, shadow, active and tighten-only rules."""
+"""Decision points inside the MCP servers: baseline behaviour, decision-model answers, fallback and tighten-only rules."""
 import asyncio
 import json
 
@@ -39,13 +39,9 @@ def make_config(tmp_path, decisions=None, **extra):
     return from_dict(cfg)
 
 
-def jev(mode="shadow", answers=None, fail=None, threshold=0.8, decisions=None):
-    names = decisions or ["runbook_selection", "diagnosis_category", "severity", "evidence_sufficiency",
-                          "remediation_consistency"]
-    per = {n: {"mode": mode if not (n == "severity" and mode == "active") else "shadow",
-               **({"min_confidence": threshold} if mode == "active" and n != "severity" else {})} for n in names}
+def jev(answers=None, fail=None, decisions=None):
     prov = {"type": "mock", **({"answers": answers} if answers else {}), **({"fail": fail} if fail else {})}
-    return {"enabled": True, "provider": prov, "per_decision": per}
+    return {"enabled": True, "provider": prov, "enabled_decisions": decisions or []}
 
 
 @pytest.fixture
@@ -151,13 +147,14 @@ def test_disabled_decisions_record_nothing(ctx_for):
     assert ctx.store.list_decisions() == []
 
 
-# ---------------------------------------------------------------------------- shadow
-def test_shadow_records_disagreement_without_changing_anything(ctx_for):
-    ctx = ctx_for(jev("shadow", answers={
-        "category": choice("bad_deployment", options=["dependency_degradation", "intermittent_dependency_degradation",
-                                                       "bad_deployment", "config_change", "feature_flag",
-                                                       "resource_exhaustion", "unknown"]),
-        "runbook": choice("rb2", options=["rb1", "rb2", "none_applicable"])}))
+# --------------------------------------------------------------------- low confidence
+def test_low_confidence_answers_are_recorded_without_changing_anything(ctx_for):
+    ctx = ctx_for(jev(answers={
+        "category": choice("bad_deployment", conf=0.5, options=["dependency_degradation",
+                                                                 "intermittent_dependency_degradation", "bad_deployment",
+                                                                 "config_change", "feature_flag",
+                                                                 "resource_exhaustion", "unknown"]),
+        "runbook": choice("rb2", conf=0.5, options=["rb1", "rb2", "none_applicable"])}))
     call(incident_state, ctx, "record_hypotheses", incident_id="INC-1", hypotheses=[HYPOTHESIS])
     assert ctx.store.get_incident("INC-1", full=False)["current_hypotheses"][0]["category"] == "dependency_degradation"
     out = call(knowledge, ctx, "search_runbooks", query="checkout-api failover dependency", service="checkout-api",
@@ -165,22 +162,13 @@ def test_shadow_records_disagreement_without_changing_anything(ctx_for):
     assert out["runbooks"][0]["id"] == "dependency-failover" and "selection" not in out
     rows = {d["decision"]: d for d in ctx.store.list_decisions("INC-1")}
     assert rows["diagnosis_category"]["agreed"] is False and rows["diagnosis_category"]["strategy"] == "deterministic"
+    assert rows["diagnosis_category"]["validation"] == "low_confidence"
     assert rows["runbook_selection"]["applied"] == {"runbook_id": "dependency-failover"}
-    assert rows["runbook_selection"]["agreed"] is False
 
 
-def test_severity_is_shadow_only(ctx_for):
-    ctx = ctx_for(jev("active", decisions=["severity"]))
-    call(incident_state, ctx, "record_triage", incident_id="INC-1", severity="SEV3", scope="all", impact="some errors",
-         affected_services=["checkout-api"], affected_dependencies=[], initial_symptoms=["5xx 0.1"], confidence=0.7)
-    assert ctx.store.get_incident("INC-1", full=False)["severity"] == "SEV3"
-    (row,) = ctx.store.list_decisions("INC-1")
-    assert row["decision"] == "severity" and row["mode"] == "shadow" and row["applied"] == {"severity": "SEV3"}
-
-
-# ---------------------------------------------------------------------------- active
-def test_active_runbook_selection_reorders(ctx_for):
-    ctx = ctx_for(jev("active", answers={"runbook": choice("rb2", options=["rb1", "rb2", "none_applicable"])},
+# ---------------------------------------------------------------- confident answers
+def test_runbook_selection_reorders(ctx_for):
+    ctx = ctx_for(jev(answers={"runbook": choice("rb2", options=["rb1", "rb2", "none_applicable"])},
                       decisions=["runbook_selection"]))
     out = call(knowledge, ctx, "search_runbooks", query="checkout-api failover dependency", service="checkout-api",
                incident_id="INC-1")
@@ -188,17 +176,17 @@ def test_active_runbook_selection_reorders(ctx_for):
     assert out["selection"] == {"recommended": "rollback", "strategy": "jev"}
 
 
-def test_active_runbook_none_applicable(ctx_for):
-    ctx = ctx_for(jev("active", answers={"runbook": choice("none_applicable", options=["rb1", "rb2", "none_applicable"])},
+def test_runbook_none_applicable(ctx_for):
+    ctx = ctx_for(jev(answers={"runbook": choice("none_applicable", options=["rb1", "rb2", "none_applicable"])},
                       decisions=["runbook_selection"]))
     out = call(knowledge, ctx, "search_runbooks", query="checkout-api failover dependency", service="checkout-api")
     assert out["selection"]["recommended"] is None and out["runbooks"][0]["id"] == "dependency-failover"
 
 
-def test_active_category_keeps_the_llm_answer_for_audit(ctx_for):
+def test_category_keeps_the_llm_answer_for_audit(ctx_for):
     opts = ["dependency_degradation", "intermittent_dependency_degradation", "bad_deployment", "config_change",
             "feature_flag", "resource_exhaustion", "unknown"]
-    ctx = ctx_for(jev("active", answers={"category": choice("intermittent_dependency_degradation", options=opts)},
+    ctx = ctx_for(jev(answers={"category": choice("intermittent_dependency_degradation", options=opts)},
                       decisions=["diagnosis_category"]))
     call(incident_state, ctx, "record_hypotheses", incident_id="INC-1", hypotheses=[HYPOTHESIS])
     top = ctx.store.get_incident("INC-1", full=False)["current_hypotheses"][0]
@@ -206,27 +194,27 @@ def test_active_category_keeps_the_llm_answer_for_audit(ctx_for):
     assert top["category_llm"] == "dependency_degradation" and top["category_source"] == "jev"
 
 
-def test_active_evidence_check_can_reject_but_not_accept(ctx_for):
-    ctx = ctx_for(jev("active", answers={"sufficient": {"type": "noul", "noul": 0.05}}, decisions=["evidence_sufficiency"]))
+def test_evidence_check_can_reject_but_not_accept(ctx_for):
+    ctx = ctx_for(jev(answers={"sufficient": {"type": "noul", "noul": 0.05}}, decisions=["evidence_sufficiency"]))
     with pytest.raises(Exception, match="sufficient or independent"):
         call(incident_state, ctx, "set_root_cause", incident_id="INC-1", root_cause="x", confidence=0.9,
              evidence=["a", "b"])
     assert ctx.store.get_incident("INC-1", full=False).get("root_cause") is None
     # A confident "sufficient" never lets a root cause past the deterministic gate.
-    ctx2 = ctx_for(jev("active", answers={"sufficient": {"type": "noul", "noul": 0.99}}, decisions=["evidence_sufficiency"]))
+    ctx2 = ctx_for(jev(answers={"sufficient": {"type": "noul", "noul": 0.99}}, decisions=["evidence_sufficiency"]))
     with pytest.raises(Exception, match="at least 2"):
         call(incident_state, ctx2, "set_root_cause", incident_id="INC-1", root_cause="x", confidence=0.9, evidence=["a"])
 
 
 def test_remediation_consistency_only_adds_a_human(ctx_for):
-    ctx = ctx_for(jev("active", answers={"consistent": {"type": "noul", "noul": 0.02}},
+    ctx = ctx_for(jev(answers={"consistent": {"type": "noul", "noul": 0.02}},
                       decisions=["remediation_consistency"]))
     out = RemediationService(ctx).request("INC-1", "failover_dependency",
                                           {"service": "checkout-api", "dependency": "geo-a", "target": "geo-b"},
                                           "geo-a failing", ["e1", "e2"], 0.95)
     assert out["status"] == "pending_approval" and ctx.provider("remediation").executed == []
     # A model that strongly approves never turns a policy denial or an approval requirement into an allow.
-    ctx2 = ctx_for(jev("active", answers={"consistent": {"type": "noul", "noul": 0.99}},
+    ctx2 = ctx_for(jev(answers={"consistent": {"type": "noul", "noul": 0.99}},
                        decisions=["remediation_consistency"]))
     svc = RemediationService(ctx2)
     assert svc.request("INC-1", "restart_service", {"service": "checkout-api"}, "x", [], 0.95)["status"] == "pending_approval"
@@ -236,7 +224,7 @@ def test_remediation_consistency_only_adds_a_human(ctx_for):
 
 @pytest.mark.parametrize("fail", ["timeout", "unavailable", "rejected", "garbage"])
 def test_broken_decision_model_keeps_current_behaviour(ctx_for, fail):
-    ctx = ctx_for(jev("active", fail=fail))
+    ctx = ctx_for(jev(fail=fail))
     call(incident_state, ctx, "record_hypotheses", incident_id="INC-1", hypotheses=[HYPOTHESIS])
     assert ctx.store.get_incident("INC-1", full=False)["current_hypotheses"][0]["category"] == "dependency_degradation"
     out = call(knowledge, ctx, "search_runbooks", query="checkout-api failover dependency", service="checkout-api",
@@ -251,14 +239,14 @@ def test_broken_decision_model_keeps_current_behaviour(ctx_for, fail):
 
 
 def test_escalate_fallback_leaves_a_timeline_note(ctx_for):
-    ctx = ctx_for({**jev("active", fail="timeout", decisions=["diagnosis_category"]), "fallback": "escalate"})
+    ctx = ctx_for({**jev(fail="timeout", decisions=["diagnosis_category"]), "fallback": "escalate"})
     call(incident_state, ctx, "record_hypotheses", incident_id="INC-1", hypotheses=[HYPOTHESIS])
     tl = ctx.store.get_timeline("INC-1")
     assert any(e["kind"] == "decision_escalation" and "diagnosis_category" in e["message"] for e in tl)
 
 
 def test_decision_state_is_size_capped(ctx_for):
-    ctx = ctx_for(jev("shadow", decisions=["diagnosis_category"]))
+    ctx = ctx_for(jev(decisions=["diagnosis_category"]))
     big = {**HYPOTHESIS, "evidence": ["x" * 5000] * 50}
     call(incident_state, ctx, "record_hypotheses", incident_id="INC-1", hypotheses=[big])
     sent = ctx.router.provider.calls[-1]["state"]

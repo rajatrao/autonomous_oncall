@@ -165,7 +165,7 @@ def create_app(config: dict, store: SqlIncidentStore | None = None, runner: Runn
 
     @app.get("/v1/decisions", dependencies=[Depends(read_auth)])
     async def decision_summary():
-        """Counts per decision type, mode, strategy and validation outcome (shadow-mode evaluation)."""
+        """Counts per decision type, strategy and validation outcome, with agreement and latency."""
         return {"stats": await asyncio.to_thread(store.decision_stats)}
 
     @app.get("/v1/actions", dependencies=[Depends(read_auth)])
@@ -262,19 +262,19 @@ def create_app(config: dict, store: SqlIncidentStore | None = None, runner: Runn
 
 
 def _decision_metrics(stats: list[dict]) -> None:
-    agreement: dict[tuple, list[float]] = {}
+    agreement: dict[str, list[float]] = {}
     for r in stats:
-        metrics.DECISIONS.labels(r["decision"], r["mode"], r["strategy"], r["validation"]).set(r["n"])
-        a = agreement.setdefault((r["decision"], r["mode"]), [0, 0, 0.0, 0])
+        metrics.DECISIONS.labels(r["decision"], r["strategy"], r["validation"]).set(r["n"])
+        a = agreement.setdefault(r["decision"], [0, 0, 0.0, 0])
         a[0] += r["agreed"] or 0
         a[1] += r["compared"] or 0
         a[2] += float(r["latency_sum"] or 0)
         a[3] += r["latency_n"] or 0
-    for (decision, mode), (agreed, compared, lat_sum, lat_n) in agreement.items():
+    for decision, (agreed, compared, lat_sum, lat_n) in agreement.items():
         if compared:
-            metrics.DECISION_AGREEMENT.labels(decision, mode).set(agreed / compared)
+            metrics.DECISION_AGREEMENT.labels(decision).set(agreed / compared)
         if lat_n:
-            metrics.DECISION_LATENCY.labels(decision, mode).set(lat_sum / lat_n)
+            metrics.DECISION_LATENCY.labels(decision).set(lat_sum / lat_n)
 
 
 async def _json(request: Request):

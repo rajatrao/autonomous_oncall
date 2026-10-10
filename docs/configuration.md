@@ -82,7 +82,7 @@ literal PromQL braces are doubled (`{{` and `}}`). The keys are `request_rate`, 
 ## Decision models
 
 Optional `decisions:` section: a decision model (Nimble on Ollama, hosted Jev) for bounded decisions,
-off by default, with shadow and per-decision active modes. Also holds the root-cause thresholds that
+off by default; when enabled, its answers above `min_confidence` (0.8) decide. Also holds the root-cause thresholds that
 `set_root_cause` enforces (`root_cause_min_confidence`, `root_cause_min_evidence`). See
 [Decision models](decisions.md). The optional, tighten-only `remediation.category_actions` maps a
 diagnosis category to the remediation categories that may run without approval.

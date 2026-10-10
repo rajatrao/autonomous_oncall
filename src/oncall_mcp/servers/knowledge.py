@@ -32,7 +32,7 @@ def build(ctx: Context) -> MCPServer:
                         incident_id: str | None = None) -> dict:
         """Keyword search over runbooks; boosts runbooks that list the given service. Pass incident_id
         so the best match can be chosen with the incident's context."""
-        if ctx.router.mode(DecisionType.RUNBOOK_SELECTION) == "off":
+        if not ctx.router.enabled(DecisionType.RUNBOOK_SELECTION):
             return {"runbooks": kb().search_runbooks(query, service, limit)}
         candidates = kb().search_runbooks(query, service, max(limit, 10))
         if not candidates:
@@ -49,7 +49,7 @@ def build(ctx: Context) -> MCPServer:
         res = decide(ctx, *dp.runbook_selection(query, service, candidates, incident))
         runbooks = candidates[:limit]
         if res is None or not res.active:
-            return {"runbooks": runbooks}  # shadow mode: the agent sees exactly the keyword ranking
+            return {"runbooks": runbooks}  # no confident answer: the agent sees the keyword ranking
         chosen = res.applied.get("runbook_id")
         if chosen is None:
             return {"runbooks": runbooks, "selection": {"recommended": None, "strategy": res.strategy,

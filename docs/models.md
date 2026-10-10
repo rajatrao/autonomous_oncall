@@ -93,8 +93,7 @@ allowed answer. Use it as the local decision model ([Decision models](decisions.
 agent's LLM roles need a far larger context, multi-step tool calls and structured output. The page also
 lists "tools" and a 256K context, which conflicts with that note; this repository has not tested Nimble
 in the LLM roles. If you want to try it, it is only a model id: `ONCALL_FAST_MODEL=nimble` with the
-`ollama` flavor. `scripts/probe_models.py nimble` reports whether a model on your Ollama handles the decision API,
-tool calls, JSON-schema output and a long prompt; then benchmark with your own incidents
+`ollama` flavor; benchmark it with your own incidents first
 (`scripts/benchmark_decisions.py --flavor ollama`).
 
 ## How this is tested

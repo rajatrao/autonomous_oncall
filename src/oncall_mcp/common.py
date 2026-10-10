@@ -50,8 +50,8 @@ class Context:
                 provider = build_provider(settings.provider)
                 if settings.llm_fallback.get("base_url"):
                     llm = OpenAICompatibleDecisionLLM(settings.llm_fallback)
-                log.info("decision model: %r, modes: %s", provider,
-                         {d.value: settings.mode(d) for d in DecisionType if settings.mode(d) != "off"})
+                log.info("decision model: %r, decisions: %s", provider,
+                         [d.value for d in DecisionType if settings.is_enabled(d)])
             self._router = DecisionRouter(settings, provider, llm,
                                           recorder=lambda res: self.store.record_decision(res.to_record()))
         return self._router
@@ -63,15 +63,15 @@ class Context:
 
 
 def decide(ctx: Context, req, interpret, agree=None):
-    """Run one bounded decision through the router. Returns None when the decision type is off.
+    """Run one bounded decision through the router. Returns None when that decision is not enabled.
 
     Never raises: a broken decision path leaves the baseline in place, which is the behaviour the
-    tool had before decision models existed. With fallback `escalate`, a failure in active mode
+    tool had before decision models existed. With fallback `escalate`, a failure
     also leaves a timeline entry asking a human to look at that decision.
     """
     try:
         router = ctx.router
-        if router.mode(req.decision) == "off":
+        if not router.enabled(req.decision):
             return None
         res = router.decide(req, interpret, agree)
     except Exception:

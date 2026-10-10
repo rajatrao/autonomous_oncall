@@ -169,13 +169,13 @@ def test_approval_required_waits_for_a_human(agent_env):
     assert _actions(store) == [("failover_dependency", "succeeded")]
 
 
-@pytest.mark.parametrize("jev", [
-    {"ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MODE": "shadow"},
-    {"ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MODE": "active", "ONCALL_JEV_MIN_CONFIDENCE": "0.8",
-     "ONCALL_JEV_MOCK_FAIL": "timeout", "ONCALL_JEV_FALLBACK": "escalate"},
-], ids=["shadow", "active-provider-down"])
-def test_decision_model_does_not_change_a_correct_incident(agent_env, jev):
-    """Shadow mode, and an active decision model that is down, leave the incident exactly as the
+@pytest.mark.parametrize("jev,strategy", [
+    ({"ONCALL_JEV_ENABLED": "true"}, "jev"),
+    ({"ONCALL_JEV_ENABLED": "true", "ONCALL_JEV_MOCK_FAIL": "timeout", "ONCALL_JEV_FALLBACK": "escalate"},
+     "deterministic"),
+], ids=["enabled", "provider-down"])
+def test_decision_model_does_not_change_a_correct_incident(agent_env, jev, strategy):
+    """A decision model that agrees, and one that is down, leave the incident exactly as the
     LLM-only run: same mitigation, same lifecycle. Every decision point is recorded."""
     store, run = agent_env("dependency_outage", **jev)
     run()
@@ -183,6 +183,6 @@ def test_decision_model_does_not_change_a_correct_incident(agent_env, jev):
     assert inc["status"] == "CLOSED"
     assert _actions(store) == [("failover_dependency", "succeeded")]
     rows = store.list_decisions("TEST-1")
-    assert {r["decision"] for r in rows} >= {"severity", "diagnosis_category", "evidence_sufficiency",
+    assert {r["decision"] for r in rows} >= {"diagnosis_category", "evidence_sufficiency",
                                              "runbook_selection", "remediation_consistency"}
-    assert all(r["strategy"] == "deterministic" for r in rows)
+    assert all(r["strategy"] == strategy for r in rows)

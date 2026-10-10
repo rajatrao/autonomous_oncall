@@ -16,10 +16,10 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 - Optional decision models for bounded decisions (docs/decisions.md): TypeSafe's Jev API
   (`/v1/systemone`), served locally by Ollama for Nimble or hosted by TypeSafe. Decision points:
   runbook selection, diagnosis category, evidence sufficiency and remediation consistency
-  (tighten-only), severity (shadow only). Off by default; shadow and per-decision active modes,
-  validation, configurable fallback (baseline, escalate, LLM), egress guard, `decisions` table,
+  (tighten-only). Off by default; when configured it decides, above a confidence threshold
+  (default 0.8, per decision). Validation, configurable fallback (baseline, escalate, LLM), `decisions` table,
   `GET /v1/incidents/{id}/decisions`, `GET /v1/decisions`, decision metrics,
-  `scripts/benchmark_decisions.py`, `scripts/probe_models.py`, `./scripts/demo.sh jev ...`.
+  `scripts/benchmark_decisions.py`, `./scripts/demo.sh jev ...`.
 - `verify_recovery` observability tool: deterministic recovered / settling / not_recovered verdict
   used by the remediation specialist.
 - Optional `remediation.category_actions` policy rule (tighten-only).

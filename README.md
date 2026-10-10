@@ -92,7 +92,7 @@ For people **using** the agent (operators, SREs):
 - [Getting started](docs/getting-started.md): run the published agent against your own systems
 - [Configuration](docs/configuration.md): autonomy levels, policy, providers, multi-tenant setup
 - [Choosing models](docs/models.md): hosted or local (Docker Model Runner, Ollama), per role
-- [Decision models](docs/decisions.md): optional Nimble (local) or Jev (hosted) for bounded decisions, shadow mode first
+- [Decision models](docs/decisions.md): optional Nimble (local) or Jev (hosted) for bounded decisions
 - [Integrations](docs/integrations.md): the MCP capability groups and the provider contracts
 - [Incident lifecycle](docs/incident-lifecycle.md): states, events, approvals, RCA
 - [Security model](docs/security.md)

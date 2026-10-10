@@ -129,13 +129,12 @@ SCHEMA = [
         details TEXT NOT NULL
     )""",
     # Decision-model calls (docs/decisions.md): what was asked, what each path answered, what was
-    # applied. Used for shadow-mode evaluation; never contains provider credentials.
+    # applied. Never contains provider credentials.
     """CREATE TABLE IF NOT EXISTS decisions (
         id TEXT PRIMARY KEY,
         at TEXT NOT NULL,
         incident_id TEXT,
         decision TEXT NOT NULL,
-        mode TEXT NOT NULL,
         strategy TEXT NOT NULL,
         validation TEXT NOT NULL,
         agreed INTEGER,
@@ -709,7 +708,7 @@ class SqlIncidentStore:
             return self._rca(c, incident_id)
 
     # ------------------------------------------------------------------ decisions
-    _DECISION_COLS = ("decision", "mode", "strategy", "validation", "provider", "model", "latency_ms", "input_tokens")
+    _DECISION_COLS = ("decision", "strategy", "validation", "provider", "model", "latency_ms", "input_tokens")
 
     def record_decision(self, record: dict) -> dict:
         """Store one decision-model call (see oncall_core.decisions.DecisionResult.to_record)."""
@@ -718,9 +717,9 @@ class SqlIncidentStore:
         data = {k: v for k, v in record.items() if k not in self._DECISION_COLS + ("incident_id", "agreed")}
         with self.db.tx() as c:
             c.execute(
-                "INSERT INTO decisions (id, at, incident_id, decision, mode, strategy, validation, agreed, provider, model,"
-                " latency_ms, input_tokens, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (row["id"], row["at"], record.get("incident_id"), record["decision"], record["mode"], record["strategy"],
+                "INSERT INTO decisions (id, at, incident_id, decision, strategy, validation, agreed, provider, model,"
+                " latency_ms, input_tokens, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (row["id"], row["at"], record.get("incident_id"), record["decision"], record["strategy"],
                  record["validation"], None if agreed is None else int(bool(agreed)), record.get("provider"),
                  record.get("model"), record.get("latency_ms"), record.get("input_tokens"), _j(data)))
         return row
@@ -743,15 +742,15 @@ class SqlIncidentStore:
             return [self._decision_row(r) for r in c.execute(sql, (*args, limit)).all()]
 
     def decision_stats(self) -> list[dict]:
-        """Counts per decision type, mode, strategy and validation outcome, plus agreement and latency."""
+        """Counts per decision type, strategy and validation outcome, plus agreement and latency."""
         with self.db.tx() as c:
             return c.execute(
-                "SELECT decision, mode, strategy, validation, COUNT(*) AS n,"
+                "SELECT decision, strategy, validation, COUNT(*) AS n,"
                 " SUM(CASE WHEN agreed = 1 THEN 1 ELSE 0 END) AS agreed,"
                 " SUM(CASE WHEN agreed IS NOT NULL THEN 1 ELSE 0 END) AS compared,"
                 " AVG(latency_ms) AS avg_latency_ms, SUM(latency_ms) AS latency_sum, COUNT(latency_ms) AS latency_n,"
                 " SUM(input_tokens) AS input_tokens"
-                " FROM decisions GROUP BY decision, mode, strategy, validation").all()
+                " FROM decisions GROUP BY decision, strategy, validation").all()
 
     def closed_incidents(self, limit: int = 200) -> list[dict]:
         out = []

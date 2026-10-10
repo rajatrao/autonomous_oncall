@@ -9,21 +9,18 @@ The same contract is served by
 OpenAICompatibleDecisionLLM is the optional LLM fallback: it asks an OpenAI-compatible chat
 endpoint (Ollama, vLLM, a hosted API) the same questions with an enum-constrained JSON schema.
 
-Incident data leaves the network only when the operator says so: a provider refuses any URL whose
-host is not loopback or private unless `allow_external` is true.
+Incident data goes only to the URL configured here; nothing switches providers automatically.
 """
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
-import socket
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
-from oncall_core.decisions import (MAX_CHOICE_OPTIONS, MAX_QUESTIONS, MAX_SCORE_LEVELS, DecisionProviderError,
+from oncall_core.decisions import (MAX_CHOICE_OPTIONS, MAX_QUESTIONS, DecisionProviderError,
                                    ProviderResponse, Question)
 
 log = logging.getLogger(__name__)
@@ -32,41 +29,11 @@ MAX_BODY_BYTES = 64 * 1024
 RETRYABLE = {408, 425, 429, 500, 502, 503, 504, 529}
 
 
-class ExternalEndpointRefused(ValueError):
-    pass
-
-
-def is_local_url(url: str) -> bool:
-    """True for loopback, private, link-local and container-internal host names."""
-    host = (urlparse(url).hostname or "").lower()
-    if not host:
-        return False
-    if host in ("localhost", "host.docker.internal", "model-runner.docker.internal") or host.endswith(".internal") \
-            or host.endswith(".local") or "." not in host:
-        return True
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        try:
-            ip = ipaddress.ip_address(socket.gethostbyname(host))
-        except (OSError, ValueError):
-            return False
-    return ip.is_loopback or ip.is_private or ip.is_link_local
-
-
-def check_endpoint(url: str, allow_external: bool, what: str) -> None:
+def check_url(url: str, what: str) -> None:
     if not url:
         raise ValueError(f"{what}: url is required")
     if urlparse(url).scheme not in ("http", "https"):
         raise ValueError(f"{what}: url must be http(s)")
-    if not allow_external and not is_local_url(url):
-        raise ExternalEndpointRefused(
-            f"{what}: {urlparse(url).hostname} is not a local or private address; set allow_external: true "
-            "to send incident data to it")
-
-
-def _as_bool(v: Any) -> bool:
-    return v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "yes", "on")
 
 
 def check_limits(questions: dict[str, Question]) -> None:
@@ -75,8 +42,6 @@ def check_limits(questions: dict[str, Question]) -> None:
     for key, q in questions.items():
         if q.kind == "choice" and not 2 <= len(q.criteria or {}) <= MAX_CHOICE_OPTIONS:
             raise DecisionProviderError("rejected", f"{key}: a choice needs 2..{MAX_CHOICE_OPTIONS} options")
-        if q.kind == "score" and not 2 <= len(q.criteria or []) <= MAX_SCORE_LEVELS:
-            raise DecisionProviderError("rejected", f"{key}: a score needs 2..{MAX_SCORE_LEVELS} levels")
 
 
 class SystemOneProvider:
@@ -89,7 +54,7 @@ class SystemOneProvider:
         self.model = cfg.get("model") or None
         if not self.model:
             raise ValueError("decisions.provider.model is required (for example nimble or jev-latest)")
-        check_endpoint(self.base, _as_bool(cfg.get("allow_external", False)), "decisions.provider")
+        check_url(self.base, "decisions.provider")
         key = cfg.get("api_key") or ""
         self._headers = {"Content-Type": "application/json"}
         if key:
@@ -128,7 +93,7 @@ class MockDecisionProvider:
     """Deterministic answers for tests and the keyless demo.
 
     cfg.answers maps a question key to a raw answer (as the API would return it), or the provider
-    picks: choice -> the first option, noul -> 0.9, score -> the middle level. cfg.fail can be
+    picks: choice -> the first option, noul -> 0.9. cfg.fail can be
     timeout | unavailable | rejected | garbage to simulate failures.
     """
 
@@ -157,13 +122,8 @@ class MockDecisionProvider:
                 opts = list(q.criteria or {})
                 out[key] = {"type": "choice", "choice": opts[0], "confidence": 0.9,
                             "probabilities": {o: (0.9 if i == 0 else 0.1 / (len(opts) - 1)) for i, o in enumerate(opts)}}
-            elif q.kind == "noul":
-                out[key] = {"type": "noul", "noul": 0.9}
             else:
-                n = len(q.criteria or [])
-                mid = n // 2
-                out[key] = {"type": "score", "score": float(mid), "confidence": 0.9,
-                            "probabilities": {str(i): (0.9 if i == mid else 0.1 / (n - 1)) for i in range(n)}}
+                out[key] = {"type": "noul", "noul": 0.9}
         return ProviderResponse(answers=out, model=self.model, usage={"input_tokens": 0, "output_tokens": 0})
 
 
@@ -182,7 +142,7 @@ class OpenAICompatibleDecisionLLM:
         self.model = cfg.get("model") or None
         if not self.model:
             raise ValueError("decisions.llm_fallback.model is required")
-        check_endpoint(self.base, _as_bool(cfg.get("allow_external", False)), "decisions.llm_fallback")
+        check_url(self.base, "decisions.llm_fallback")
         self.assumed_confidence = float(cfg.get("confidence_when_llm") or 0.0)
         key = cfg.get("api_key") or ""
         self._headers = {"Content-Type": "application/json"}
@@ -199,10 +159,8 @@ class OpenAICompatibleDecisionLLM:
         for key, q in questions.items():
             if q.kind == "choice":
                 props[key] = {"type": "string", "enum": list(q.criteria or {})}
-            elif q.kind == "noul":
-                props[key] = {"type": "boolean"}
             else:
-                props[key] = {"type": "integer", "minimum": 0, "maximum": len(q.criteria or []) - 1}
+                props[key] = {"type": "boolean"}
         return {"type": "object", "properties": props, "required": list(questions), "additionalProperties": False}
 
     def evaluate(self, state: Any, questions: dict[str, Question], timeout_s: float) -> ProviderResponse:
@@ -239,12 +197,8 @@ class OpenAICompatibleDecisionLLM:
             if q.kind == "choice":
                 answers[key] = {"type": "choice", "choice": v, "confidence": conf,
                                 "probabilities": {o: (1.0 if o == v else 0.0) for o in (q.criteria or {})}}
-            elif q.kind == "noul":
-                answers[key] = {"type": "noul", "noul": conf if v is True else 1 - conf if v is False else None}
             else:
-                n = len(q.criteria or [])
-                answers[key] = {"type": "score", "score": v, "confidence": conf,
-                                "probabilities": {str(i): (1.0 if i == v else 0.0) for i in range(n)}}
+                answers[key] = {"type": "noul", "noul": conf if v is True else 1 - conf if v is False else None}
         usage = r.json().get("usage") or {}
         return ProviderResponse(answers=answers, model=self.model,
                                 usage={"input_tokens": usage.get("prompt_tokens"), "output_tokens": usage.get("completion_tokens")})

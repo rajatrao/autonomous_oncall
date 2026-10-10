@@ -471,7 +471,7 @@
     "decisions": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Optional decision model (TypeSafe Jev API, also served by Ollama for local models such as Nimble) for bounded decisions made by the MCP servers. Off by default; see docs/decisions.md.",
+      "description": "Optional decision model (TypeSafe Jev API, also served by Ollama for local models such as Nimble) for bounded decisions made by the MCP servers. Off by default; when enabled it decides; see docs/decisions.md.",
       "properties": {
         "enabled": {
           "description": "true or false (a string is accepted so the value can come from ${VAR}).",
@@ -522,28 +522,6 @@
               "type": "string",
               "description": "Reference it as ${ONCALL_JEV_API_KEY}; never inline."
             },
-            "allow_external": {
-              "description": "Required to send incident data to a non-local, non-private host.",
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "true",
-                    "false",
-                    "True",
-                    "False",
-                    "1",
-                    "0",
-                    "yes",
-                    "no",
-                    ""
-                  ]
-                }
-              ]
-            },
             "timeout_ms": {
               "anyOf": [
                 {
@@ -580,26 +558,8 @@
             }
           }
         },
-        "default_mode": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "off",
-                "shadow",
-                "active"
-              ]
-            },
-            {
-              "type": "string",
-              "enum": [
-                ""
-              ]
-            }
-          ]
-        },
         "enabled_decisions": {
-          "description": "Decision types to run, as a list or a comma-separated string.",
+          "description": "Decisions the decision model handles, as a list or a comma-separated string. Empty: all of them.",
           "anyOf": [
             {
               "type": "array",
@@ -608,7 +568,6 @@
                 "enum": [
                   "runbook_selection",
                   "diagnosis_category",
-                  "severity",
                   "evidence_sufficiency",
                   "remediation_consistency"
                 ]
@@ -651,6 +610,20 @@
             }
           ]
         },
+        "min_confidence": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
+            }
+          ],
+          "description": "An answer below this confidence goes to the fallback (default 0.8). Decision-model probabilities are not calibrated accuracy; raise it if the model is wrong too often."
+        },
         "per_decision": {
           "type": "object",
           "additionalProperties": false,
@@ -659,14 +632,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "shadow",
-                    "active"
-                  ]
-                },
                 "fallback": {
                   "type": "string",
                   "enum": [
@@ -687,7 +652,7 @@
                       "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
                     }
                   ],
-                  "description": "Required in active mode. Set it from shadow-mode data: decision-model probabilities are not calibrated accuracy."
+                  "description": "Overrides decisions.min_confidence for this decision."
                 }
               }
             },
@@ -695,14 +660,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "shadow",
-                    "active"
-                  ]
-                },
                 "fallback": {
                   "type": "string",
                   "enum": [
@@ -723,43 +680,7 @@
                       "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
                     }
                   ],
-                  "description": "Required in active mode. Set it from shadow-mode data: decision-model probabilities are not calibrated accuracy."
-                }
-              }
-            },
-            "severity": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "shadow",
-                    "active"
-                  ]
-                },
-                "fallback": {
-                  "type": "string",
-                  "enum": [
-                    "baseline",
-                    "llm",
-                    "escalate"
-                  ]
-                },
-                "min_confidence": {
-                  "anyOf": [
-                    {
-                      "type": "number",
-                      "minimum": 0,
-                      "maximum": 1
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
-                    }
-                  ],
-                  "description": "Required in active mode. Set it from shadow-mode data: decision-model probabilities are not calibrated accuracy."
+                  "description": "Overrides decisions.min_confidence for this decision."
                 }
               }
             },
@@ -767,14 +688,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "shadow",
-                    "active"
-                  ]
-                },
                 "fallback": {
                   "type": "string",
                   "enum": [
@@ -795,7 +708,7 @@
                       "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
                     }
                   ],
-                  "description": "Required in active mode. Set it from shadow-mode data: decision-model probabilities are not calibrated accuracy."
+                  "description": "Overrides decisions.min_confidence for this decision."
                 }
               }
             },
@@ -803,14 +716,6 @@
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "off",
-                    "shadow",
-                    "active"
-                  ]
-                },
                 "fallback": {
                   "type": "string",
                   "enum": [
@@ -831,7 +736,7 @@
                       "pattern": "^\\s*(\\d+(\\.\\d+)?)?\\s*$"
                     }
                   ],
-                  "description": "Required in active mode. Set it from shadow-mode data: decision-model probabilities are not calibrated accuracy."
+                  "description": "Overrides decisions.min_confidence for this decision."
                 }
               }
             }
@@ -850,28 +755,6 @@
             },
             "api_key": {
               "type": "string"
-            },
-            "allow_external": {
-              "description": "true or false (a string is accepted so the value can come from ${VAR}).",
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string",
-                  "enum": [
-                    "true",
-                    "false",
-                    "True",
-                    "False",
-                    "1",
-                    "0",
-                    "yes",
-                    "no",
-                    ""
-                  ]
-                }
-              ]
             },
             "confidence_when_llm": {
               "anyOf": [

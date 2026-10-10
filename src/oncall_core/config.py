@@ -56,13 +56,13 @@ DEFAULTS: dict[str, Any] = {
     # apply either way.
     "decisions": {
         "enabled": False,
-        "provider": {"type": "none", "timeout_ms": 1500, "max_retries": 1, "allow_external": False},
-        "default_mode": "off",
+        "provider": {"type": "none", "timeout_ms": 1500, "max_retries": 1},
         "enabled_decisions": [],
         "fallback": "baseline",
         "environments": [],
         "per_decision": {},
         "llm_fallback": {},
+        "min_confidence": 0.8,
         "root_cause_min_confidence": 0.8,
         "root_cause_min_evidence": 2,
     },

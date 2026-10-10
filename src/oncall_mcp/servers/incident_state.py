@@ -92,8 +92,6 @@ def build(ctx: Context) -> MCPServer:
         ctx.store.update_incident(incident_id, "triage", **fields)
         ctx.store.append_timeline(incident_id, "triage", f"Triage complete: {severity}, {impact}", "triage",
                                   {"affected_dependencies": affected_dependencies})
-        # Shadow only: the triage specialist's severity stays authoritative.
-        decide(ctx, *dp.severity(inc, triage))
         return {"incident_id": incident_id, "recorded": True}
 
     @mcp.tool(annotations=WRITE_STATE)

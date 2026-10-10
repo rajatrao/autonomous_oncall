@@ -29,15 +29,6 @@ CATEGORIES: dict[str, str] = {
     "unknown": "None of the above is supported by the evidence",
 }
 
-SEVERITY_LEVELS = [  # ordered least to most severe; index -> SEV(5 - index)
-    "SEV5: cosmetic, no user impact",
-    "SEV4: minor, no meaningful user impact",
-    "SEV3: partial degradation, a workaround exists or a non-critical journey is affected",
-    "SEV2: a significant fraction (roughly over 10%) of requests on a critical journey fail",
-    "SEV1: most users of a critical journey cannot complete it, or data loss or security exposure",
-]
-
-
 def _clip(v: Any, n: int = MAX_ITEM_CHARS) -> Any:
     if isinstance(v, str):
         return v if len(v) <= n else v[: n - 1] + "…"
@@ -108,23 +99,6 @@ def diagnosis_category(incident: dict, hypothesis: dict) -> tuple[DecisionReques
         incident_id=incident.get("incident_id"), environment=incident.get("environment"), primary="category",
     )
     return req, lambda ans: {"category": ans["category"].value}
-
-
-# -------------------------------------------------------------------------------- severity
-def severity(incident: dict, triage: dict) -> tuple[DecisionRequest, Callable[[dict[str, Answer]], dict]]:
-    req = DecisionRequest(
-        decision=DecisionType.SEVERITY,
-        questions={"severity": Question(
-            "score", "How severe is this production incident, judged by user impact, breadth and trend?",
-            list(SEVERITY_LEVELS))},
-        state=_state(incident=_incident_context(incident), impact=triage.get("impact"), scope=triage.get("scope"),
-                     affected_services=triage.get("affected_services"),
-                     affected_dependencies=triage.get("affected_dependencies"),
-                     symptoms=triage.get("initial_symptoms")),
-        baseline={"severity": triage.get("severity")},
-        incident_id=incident.get("incident_id"), environment=incident.get("environment"), primary="severity",
-    )
-    return req, lambda ans: {"severity": f"SEV{5 - int(ans['severity'].level or 0)}"}
 
 
 # -------------------------------------------------------------------- evidence sufficiency
