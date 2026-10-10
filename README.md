@@ -96,6 +96,7 @@ For people **using** the agent (operators, SREs):
 - [Integrations](docs/integrations.md): the MCP capability groups and the provider contracts
 - [Incident lifecycle](docs/incident-lifecycle.md): states, events, approvals, RCA
 - [Security model](docs/security.md)
+- [Secrets](docs/secrets.md): `.env` locally; a vault (Docker Compose) or Kubernetes Secrets in production
 
 For people **developing** the agent:
 

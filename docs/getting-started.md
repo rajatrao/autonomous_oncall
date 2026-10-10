@@ -138,6 +138,9 @@ services:
   # ...and incident_state, observability, changes, communications, knowledge the same way
 ```
 
+In production, inject these secrets from a vault or Kubernetes Secrets rather than `.env`; see
+[Secrets](secrets.md).
+
 `oncall-mcp <server>` runs one server; ports default to 7101-7106 in the order incident_state,
 observability, changes, remediation, communications, knowledge. `GET /healthz` on each returns its
 MCP interface version.

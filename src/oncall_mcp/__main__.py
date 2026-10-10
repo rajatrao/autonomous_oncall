@@ -6,10 +6,12 @@ import asyncio
 import importlib
 import logging
 import os
+import sys
 
 import uvicorn
 
 from oncall_core.config import load_config
+from oncall_core.secrets import SecretsError, check_credentials
 from . import DEFAULT_PORTS, SERVERS
 from .common import BearerAuth, Context, server_token
 
@@ -26,6 +28,8 @@ def create_app(server: str, config: dict):
         kwargs["transport_security"] = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     app = mcp.streamable_http_app(**kwargs)
     token = server_token(config, server)
+    # In vault or kubernetes mode: refuse an empty or demo token (docs/secrets.md).
+    check_credentials(config, {f"ONCALL_{server.upper()}_MCP_TOKEN": token})
     if not token:
         logging.getLogger("oncall_mcp").warning("%s: no auth token configured; accepting unauthenticated requests", server)
     return BearerAuth(app, token, server), ctx
@@ -40,10 +44,13 @@ def main() -> None:
     args = ap.parse_args()
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s %(message)s")
     config = load_config(args.config)
-    if args.server == "all":
-        asyncio.run(_run_all(config, args.host))
-        return
-    app, _ = create_app(args.server, config)
+    try:
+        if args.server == "all":
+            asyncio.run(_run_all(config, args.host))
+            return
+        app, _ = create_app(args.server, config)
+    except SecretsError as exc:
+        sys.exit(f"oncall-mcp {args.server}: {exc}")
     uvicorn.run(app, host=args.host, port=args.port or DEFAULT_PORTS[args.server], log_level="warning")
 
 

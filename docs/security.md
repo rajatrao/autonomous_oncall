@@ -51,7 +51,9 @@ outside the model, in layers.
   a Kubernetes service account that can patch and scale deployments in one namespace, nothing else;
   a GitHub token with read access to deployments.
 - **Configuration uses `${VAR}` references** expanded at start-up; keep values in your secret store.
-  The demo generates random tokens into a git-ignored `.env`.
+  The demo generates random tokens into a git-ignored `.env`. In production, secrets come only from
+  a vault (`oncall-secrets compose`) or Kubernetes Secrets, never `.env`, and the gateway and MCP
+  servers refuse to start with an empty or `demo-only` credential ([Secrets](secrets.md)).
 - **Logs are redacted** before reaching the model (tokens, card-like numbers, emails), and agents
   that read logs set `redact_secrets: true`.
 

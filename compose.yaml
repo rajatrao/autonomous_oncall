@@ -25,6 +25,8 @@ x-demo: &demo
 x-mcp-env: &mcp-env
   ONCALL_CONFIG: /config/oncall.yaml
   ONCALL_MCP_ALLOWED_HOST: "*"
+  # env (local .env) | vault (set by `oncall-secrets compose`); see docs/secrets.md.
+  ONCALL_SECRETS_SOURCE: ${ONCALL_SECRETS_SOURCE:-env}
   ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
   # Optional decision model (docs/decisions.md); `./scripts/demo.sh jev ...` sets these. Off by default.
   ONCALL_JEV_ENABLED: ${ONCALL_JEV_ENABLED:-false}
@@ -46,6 +48,7 @@ services:
     volumes: ["./demo/config:/config:ro"]
     environment:
       ONCALL_CONFIG: /config/oncall.yaml
+      ONCALL_SECRETS_SOURCE: ${ONCALL_SECRETS_SOURCE:-env}
       ONCALL_STATE_URL: postgresql://oncall:${ONCALL_DB_PASSWORD:-demo-only-oncall-db}@postgres:5432/oncall
       ONCALL_INGEST_TOKEN: ${ONCALL_INGEST_TOKEN:-demo-only-ingest}
       ONCALL_GATEWAY_API_TOKEN: ${ONCALL_GATEWAY_API_TOKEN:-demo-only-read}
