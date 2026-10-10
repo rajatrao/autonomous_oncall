@@ -180,8 +180,7 @@ docker agent run <registry>/oncall-agent:0.1.0 --exec "List open incidents"
 
 Pin an exact version (`0.1.0`) in production; the `0.1` tag moves with patch releases.
 
-The gateway's `runner` section tells it how to reach the agent: `docker-agent-api` (above, recommended)
-or `docker-agent-exec`, which runs `docker agent run --exec` per incident wake-up. See
+The gateway's `runner` section tells it how to reach this agent server. See
 [Configuration](configuration.md#runner).
 
 ## 6. Send alerts

@@ -3,16 +3,12 @@
 The gateway does not keep a long-running conversation with the agent. Each time something happens
 on an incident, it **wakes** the agent: it starts one short Docker Agent run that loads the incident
 from durable state, does the next piece of work through its MCP tools, records what it did, and
-stops. The **runner** is the part of the gateway that starts that run. There are two, plus a no-op:
+stops. The **runner** is the part of the gateway that starts that run:
 
 | `runner.type` | How it starts a run | Use it when |
 | --- | --- | --- |
 | `docker-agent-api` | HTTP call to a long-lived `docker agent serve api` server | Production and the demo (default). One agent server, many gateways or replicas. |
-| `docker-agent-exec` | Spawns `docker agent run --exec` as a child process per run | No server to operate: a single VM, CI, or local development. |
 | `none` | Nothing; tasks are stored and marked done | Shadow mode: test alert ingestion without running the agent. |
-
-Both real runners send the same wake-up message, enforce the same timeout and judge success the
-same way. Only the transport differs.
 
 ## When the agent is woken
 
@@ -124,48 +120,8 @@ The model, flavor and MCP endpoints are set on the agent server (`--flavor`, env
 the gateway. Pull a new agent version by restarting the server, or let it re-pull the OCI
 reference with `--pull-interval`.
 
-## docker-agent-exec runner
-
-For each run the gateway spawns:
-
-```
-docker agent run --exec --json --safety restricted --session oncall-<task_id>-<attempt> \
-  [--flavor <f> ...] [--agent <name>] [extra_args ...] <agent_ref> "<wake message>"
-```
-
-- `<agent_ref>` is a local file or an OCI reference, so the gateway can run the published agent
-  directly: `agent_ref: docker.io/acme/oncall-agent:0.1.0`.
-- `--session` uses an id the gateway owns, so each attempt is a separate, traceable session.
-- `--json` makes Docker Agent print one JSON event per line, which the gateway reads the same way
-  as the API stream.
-- The child process inherits the gateway's environment, so the model key and the
-  `ONCALL_*_MCP_URL` / `_TOKEN` variables must be set on the gateway container.
-- If the run exceeds the timeout, the process is killed.
-
-```yaml
-runner:
-  type: docker-agent-exec
-  binary: docker agent          # or the standalone docker-agent binary
-  agent_ref: docker.io/acme/oncall-agent:0.1.0
-  flavors: [dmr]
-  extra_args: []                # e.g. ["--data-dir", "/data/docker-agent"]
-  safety: restricted
-  timeout_seconds: 900
-  concurrency: 2
-```
-
-## Choosing between them
-
-| | `docker-agent-api` | `docker-agent-exec` |
-| --- | --- | --- |
-| Moving parts | A Docker Agent server next to the gateway | Docker Agent binary inside the gateway image |
-| Credentials | Model key and MCP tokens live only on the agent server | Gateway holds them too |
-| Start-up cost per run | None (server is warm) | Process start and config load each run |
-| Scaling | Scale agent servers and gateways independently | Scales with the gateway |
-| Isolation | Agent runs outside the gateway process | Child process of the gateway |
-
-Prefer `docker-agent-api`: it keeps the model key and MCP tokens out of the gateway, which only
-needs the agent server's token.
+Prefer this over running Docker Agent inside the gateway: the model key and MCP tokens stay on the
+agent server, and the gateway only needs the agent server's token.
 
 ## Success and failure
 
@@ -174,7 +130,7 @@ run. It **fails** when:
 
 | Failure | Typical cause |
 | --- | --- |
-| Session could not be created, HTTP error, or non-zero exit code | Agent server down, bad token, bad agent reference |
+| Session could not be created, or an HTTP error | Agent server down, bad token, bad agent reference |
 | The run reported an error | Model provider error, unreachable model |
 | The stream ended without a stop event | Connection lost, runtime crashed |
 | The agent hit its iteration limit | Looping agent |

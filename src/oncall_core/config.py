@@ -27,7 +27,6 @@ DEFAULTS: dict[str, Any] = {
         "timeout_seconds": 900,
         "max_attempts": 3,
         "concurrency": 2,
-        "flavors": [],
     },
     "integrations": {
         "observability": {"provider": "none"},

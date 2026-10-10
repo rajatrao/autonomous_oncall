@@ -1,10 +1,7 @@
 """Runners start one Docker Agent run for one durable task.
 
-Two documented Docker Agent entry points are supported:
-
-* docker-agent-api:  `docker agent serve api <agent>` (HTTP + SSE). The gateway creates a session
-  with POST /api/sessions and runs it with POST /api/sessions/:id/agent/:agent[/:name].
-* docker-agent-exec: `docker agent run --exec <agent> ...` as a subprocess (no server needed).
+The gateway talks to `docker agent serve api <agent>` (HTTP + SSE): it creates a session with
+POST /api/sessions and runs it with POST /api/sessions/:id/agent/:agent[/:name].
 
 A run is successful when the root session stops without an error. The agent reads and writes
 incident state only through MCP tools, so a runner never needs to interpret the conversation.
@@ -14,8 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -85,7 +80,7 @@ class NoopRunner(Runner):
 class _EventTracker:
     """Folds Docker Agent runtime events into a result."""
 
-    def __init__(self, root_session: str | None):
+    def __init__(self, root_session: str):
         self.root = root_session
         self.text: list[str] = []
         self.tool_calls = 0
@@ -96,14 +91,12 @@ class _EventTracker:
 
     def is_root(self, ev: dict) -> bool:
         sid = ev.get("session_id")
-        return not sid or self.root is None or sid == self.root
+        return not sid or sid == self.root
 
     def feed(self, ev: dict) -> None:
         self.events += 1
         kind = ev.get("type")
-        if kind == "stream_started" and self.root is None:
-            self.root = ev.get("session_id")
-        elif kind == "agent_choice" and self.is_root(ev):
+        if kind == "agent_choice" and self.is_root(ev):
             self.text.append(ev.get("content", ""))
         elif kind == "tool_call":
             self.tool_calls += 1
@@ -192,71 +185,10 @@ class DockerAgentApiRunner(Runner):
             return tracker.result(sid)
 
 
-class DockerAgentExecRunner(Runner):
-    name = "docker-agent-exec"
-
-    def __init__(self, cfg: dict):
-        binary = cfg.get("binary") or "docker-agent"
-        # `docker agent` (CLI plugin) and the standalone `docker-agent` binary take the same arguments.
-        self.cmd = binary.split()
-        self.agent_ref = cfg.get("agent_ref") or "dist/oncall-agent.yaml"
-        self.agent_name = cfg.get("wake_agent") or ""
-        self.flavors = cfg.get("flavors") or []
-        self.safety = cfg.get("safety", "restricted")
-        self.timeout = float(cfg.get("timeout_seconds", 900))
-        self.extra_args = cfg.get("extra_args") or []
-
-    async def ready(self) -> bool:
-        return shutil.which(self.cmd[0]) is not None
-
-    def argv(self, session_id: str, message: str) -> list[str]:
-        args = [*self.cmd, "run", "--exec", "--json", "--safety", self.safety, "--session", session_id]
-        for f in self.flavors:
-            args += ["--flavor", f]
-        if self.agent_name:
-            args += ["--agent", self.agent_name]
-        return [*args, *self.extra_args, self.agent_ref, message]
-
-    async def run(self, task: dict, incident: dict) -> RunResult:
-        # Supervisor-owned session id: `--session <id>` creates the session when it does not exist.
-        sid = f"oncall-{task['task_id']}-{task.get('attempt', 1)}"
-        argv = self.argv(sid, wake_message(task, incident))
-        try:
-            proc = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE,
-                                                        stderr=asyncio.subprocess.PIPE, env=os.environ.copy())
-        except FileNotFoundError as exc:
-            raise RunFailed(f"docker-agent binary not found: {self.cmd[0]}") from exc
-        tracker = _EventTracker(None)
-        stderr = b""
-        try:
-            async with asyncio.timeout(self.timeout):
-                assert proc.stdout is not None
-                async for raw in proc.stdout:
-                    try:
-                        ev = json.loads(raw)
-                    except ValueError:
-                        continue
-                    if isinstance(ev, dict):
-                        tracker.feed(ev)
-                stderr = await proc.stderr.read() if proc.stderr else b""
-                code = await proc.wait()
-        except TimeoutError as exc:
-            proc.kill()
-            await proc.wait()
-            raise RunFailed(f"agent run exceeded {int(self.timeout)}s") from exc
-        if code != 0:
-            raise RunFailed(f"docker-agent exited with {code}: {stderr.decode(errors='replace')[-500:]}")
-        if not tracker.stopped and not tracker.error:
-            tracker.stopped = True  # exit code 0 is authoritative for exec mode
-        return tracker.result(sid)
-
-
 def build_runner(cfg: dict) -> Runner:
     kind = cfg.get("type", "none")
     if kind == "docker-agent-api":
         return DockerAgentApiRunner(cfg)
-    if kind == "docker-agent-exec":
-        return DockerAgentExecRunner(cfg)
     if kind == "none":
         return NoopRunner()
     raise ValueError(f"unknown runner type {kind}")

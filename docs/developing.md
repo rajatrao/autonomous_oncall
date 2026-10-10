@@ -46,7 +46,7 @@ mitigation). The `scripted-model` flavor in the agent file points both model ali
 
 The agent-behaviour tests (`tests/test_agent_behaviour.py`) start the six MCP servers in-process with
 `mock` providers fed from `tests/fixtures/*.yaml`, start the scripted model, and run the real
-`docker-agent run --exec` through the gateway's exec runner. They assert outcomes in the incident
+`docker-agent run --exec` directly. They assert outcomes in the incident
 store: state, root cause, action status, RCA sections.
 
 To write a new scenario, add a fixture (times are relative, like `"now-10m"`) and a test that sends an
