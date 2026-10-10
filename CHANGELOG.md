@@ -43,6 +43,9 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 
 - The `docker-agent-exec` runner and its `runner.binary`, `runner.agent_ref`, `runner.flavors` and
   `runner.extra_args` settings. The gateway reaches the agent only through `docker-agent-api`.
+- `schemas/agent-task.schema.json`, `schemas/incident-state.schema.json` and
+  `schemas/remediation.schema.json`. No code loaded them, so they could drift from the real data
+  unnoticed. The incident event and config schemas, which are enforced at runtime, remain.
 
 ## [0.1.0] - 2026-10-08
 
