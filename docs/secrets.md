@@ -31,7 +31,7 @@ reads it. `.env` is git-ignored and is never used in production.
      ONCALL_INGEST_TOKEN=... ONCALL_GATEWAY_API_TOKEN=... ONCALL_GATEWAY_APPROVER_TOKEN=... \
      ONCALL_AGENT_API_TOKEN=... ONCALL_INCIDENT_STATE_MCP_TOKEN=... ONCALL_OBSERVABILITY_MCP_TOKEN=... \
      ONCALL_CHANGES_MCP_TOKEN=... ONCALL_REMEDIATION_MCP_TOKEN=... ONCALL_COMMUNICATIONS_MCP_TOKEN=... \
-     ONCALL_KNOWLEDGE_MCP_TOKEN=... ONCALL_DB_PASSWORD=... ANTHROPIC_API_KEY=...
+     ONCALL_KNOWLEDGE_MCP_TOKEN=... ONCALL_DB_PASSWORD=... ONCALL_MODEL_API_KEY=...
    ```
 
    The ten boundary tokens above are required. Database passwords, model API keys,
@@ -92,7 +92,7 @@ stringData:
   ONCALL_AGENT_API_TOKEN: "..."
   ONCALL_REMEDIATION_MCP_TOKEN: "..."
   OPS_API_TOKEN: "..."
-  ANTHROPIC_API_KEY: "..."
+  ONCALL_MODEL_API_KEY: "..."
   # ...the other MCP tokens and the credentials your integrations use
 ---
 # Gateway container (excerpt)
@@ -116,8 +116,8 @@ env:
 ---
 # docker-agent container (excerpt): the model key and the six MCP tokens
 env:
-  - name: ANTHROPIC_API_KEY
-    valueFrom: {secretKeyRef: {name: oncall, key: ANTHROPIC_API_KEY}}
+  - name: ONCALL_MODEL_API_KEY
+    valueFrom: {secretKeyRef: {name: oncall, key: ONCALL_MODEL_API_KEY}}
   - name: ONCALL_REMEDIATION_MCP_TOKEN
     valueFrom: {secretKeyRef: {name: oncall, key: ONCALL_REMEDIATION_MCP_TOKEN}}
   # ...the other five MCP tokens

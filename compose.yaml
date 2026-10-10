@@ -86,9 +86,7 @@ services:
       # Ollama running natively on the host (it has the GPU; Ollama in a container on a Mac does not).
       ONCALL_OLLAMA_URL: ${ONCALL_OLLAMA_URL:-http://host.docker.internal:11434/v1}
       ONCALL_MODEL_BASE_URL: ${ONCALL_MODEL_BASE_URL:-}
-      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY:-}   # Anthropic, OpenAI or gateway key
       ONCALL_SCRIPTED_MODEL_URL: http://scripted-model:7199/v1
       ONCALL_SCRIPTED_MODEL_TOKEN: scripted
       ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp

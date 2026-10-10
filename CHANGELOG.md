@@ -9,6 +9,8 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 
 ### Added
 
+- One API key variable for every hosted model provider: `ONCALL_MODEL_API_KEY` (Anthropic, OpenAI
+  and OpenAI-compatible). `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are no longer used.
 - Production secrets (docs/secrets.md): `oncall-secrets compose` runs Docker Compose with every
   secret from HashiCorp Vault or OpenBao (KV version 2) and never reads `.env`; it refuses to start
   when the vault is unreachable, a required secret is missing, or a secret is set outside the vault.

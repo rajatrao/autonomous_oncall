@@ -21,7 +21,8 @@ metadata:
   tags: [oncall, incident-response, sre, mcp]
 
 # Two model roles. "reasoning" runs the Incident Commander, Diagnostics, Remediation and RCA;
-# "fast" runs Triage, the investigators and Communications. These defaults need ANTHROPIC_API_KEY.
+# "fast" runs Triage, the investigators and Communications. These defaults need ONCALL_MODEL_API_KEY
+# (an Anthropic key); every hosted provider below reads its key from that one variable.
 # To use other models without editing this file, enable one of the provider flavors at the end of
 # the file (anthropic, openai, openai-compatible, dmr, ollama) and set ONCALL_REASONING_MODEL and
 # ONCALL_FAST_MODEL, or override per run with `docker agent run|serve ... --model`.
@@ -29,10 +30,12 @@ models:
   reasoning:
     provider: anthropic
     model: claude-sonnet-5-5
+    token_key: ONCALL_MODEL_API_KEY
     max_tokens: 16000
   fast:
     provider: anthropic
     model: claude-haiku-5-5
+    token_key: ONCALL_MODEL_API_KEY
     max_tokens: 8000
 
 # MCP capability groups. Each is a separate remote (streamable HTTP) MCP server with its own
@@ -338,12 +341,12 @@ flavors:
   # reports an unset variable instead of guessing). See docs/models.md for recommended models.
   anthropic:
     models:
-      reasoning: {provider: anthropic, model: "${env.ONCALL_REASONING_MODEL}"}
-      fast: {provider: anthropic, model: "${env.ONCALL_FAST_MODEL}"}
+      reasoning: {provider: anthropic, model: "${env.ONCALL_REASONING_MODEL}", token_key: ONCALL_MODEL_API_KEY}
+      fast: {provider: anthropic, model: "${env.ONCALL_FAST_MODEL}", token_key: ONCALL_MODEL_API_KEY}
   openai:
     models:
-      reasoning: {provider: openai, model: "${env.ONCALL_REASONING_MODEL}"}
-      fast: {provider: openai, model: "${env.ONCALL_FAST_MODEL}"}
+      reasoning: {provider: openai, model: "${env.ONCALL_REASONING_MODEL}", token_key: ONCALL_MODEL_API_KEY}
+      fast: {provider: openai, model: "${env.ONCALL_FAST_MODEL}", token_key: ONCALL_MODEL_API_KEY}
   # Any OpenAI-compatible endpoint (vLLM, LM Studio, LiteLLM, a corporate gateway).
   openai-compatible:
     models:

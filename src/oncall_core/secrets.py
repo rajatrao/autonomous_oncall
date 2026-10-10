@@ -37,7 +37,8 @@ OPTIONAL = (
     #   POSTGRES_PASSWORD   the `postgres` superuser; only the Postgres image uses it, to create the
     #                       databases (demo/config/postgres-init.sh). The services never connect with it.
     # With your own managed Postgres, put the `oncall` credentials in ONCALL_STATE_URL instead.
-    "ONCALL_DB_PASSWORD", "POSTGRES_PASSWORD", "ONCALL_MODEL_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+    "ONCALL_DB_PASSWORD", "POSTGRES_PASSWORD",
+    "ONCALL_MODEL_API_KEY",  # the model provider's key (Anthropic, OpenAI or a gateway)
     "ONCALL_JEV_API_KEY", "PROMETHEUS_TOKEN", "CHANGES_READ_TOKEN", "GITHUB_DEPLOYMENTS_READ_TOKEN", "OPS_API_TOKEN",
     "SLACK_BOT_TOKEN", "PLATFORM_CHANGES_READ_TOKEN", "PLATFORM_OPS_TOKEN", "PLATFORM_DEPLOY_TOKEN",
 )

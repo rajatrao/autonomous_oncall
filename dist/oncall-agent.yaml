@@ -27,10 +27,12 @@ models:
   reasoning:
     provider: anthropic
     model: claude-sonnet-5-5
+    token_key: ONCALL_MODEL_API_KEY
     max_tokens: 16000
   fast:
     provider: anthropic
     model: claude-haiku-5-5
+    token_key: ONCALL_MODEL_API_KEY
     max_tokens: 8000
 mcps:
   incident_state:
@@ -929,17 +931,21 @@ flavors:
       reasoning:
         provider: anthropic
         model: ${env.ONCALL_REASONING_MODEL}
+        token_key: ONCALL_MODEL_API_KEY
       fast:
         provider: anthropic
         model: ${env.ONCALL_FAST_MODEL}
+        token_key: ONCALL_MODEL_API_KEY
   openai:
     models:
       reasoning:
         provider: openai
         model: ${env.ONCALL_REASONING_MODEL}
+        token_key: ONCALL_MODEL_API_KEY
       fast:
         provider: openai
         model: ${env.ONCALL_FAST_MODEL}
+        token_key: ONCALL_MODEL_API_KEY
   openai-compatible:
     models:
       reasoning:

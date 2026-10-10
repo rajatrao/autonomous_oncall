@@ -97,8 +97,8 @@ def test_missing_required_secret_refuses_to_start():
 
 
 def test_secret_in_the_shell_refuses_to_start():
-    with pytest.raises(SecretsError, match="set in the shell.*ANTHROPIC_API_KEY"):
-        vault_environment({"ANTHROPIC_API_KEY": "sk-shell"}, {}, VAULT_DATA)
+    with pytest.raises(SecretsError, match="set in the shell.*ONCALL_MODEL_API_KEY"):
+        vault_environment({"ONCALL_MODEL_API_KEY": "sk-shell"}, {}, VAULT_DATA)
     # Also any extra key the vault holds.
     with pytest.raises(SecretsError, match="set in the shell.*MY_EXTRA_TOKEN"):
         vault_environment({"MY_EXTRA_TOKEN": "x"}, {}, {**VAULT_DATA, "MY_EXTRA_TOKEN": "y"})
@@ -118,7 +118,7 @@ def test_secret_in_the_settings_file_refuses_to_start(tmp_path):
 def test_report_shows_sources_not_values():
     rows = dict(report({**VAULT_DATA, "EXTRA_KEY": "x"}))
     assert rows["ONCALL_GATEWAY_API_TOKEN"] == "vault" and rows["EXTRA_KEY"] == "vault"
-    assert rows["ANTHROPIC_API_KEY"] == "not set (optional)"
+    assert rows["ONCALL_MODEL_API_KEY"] == "not set (optional)"
     assert set(rows) >= set(KNOWN)
     assert report({})[0][1] == "MISSING (required)"
 

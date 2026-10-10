@@ -160,7 +160,7 @@ Serve the published artifact with the official Docker Agent image and point it a
       - --auth-token=${ONCALL_AGENT_API_TOKEN}
       - --session-db=/data/session.db
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ONCALL_MODEL_API_KEY: ${ONCALL_MODEL_API_KEY}   # the model provider's API key
       ONCALL_INCIDENT_STATE_MCP_URL: http://mcp-incident-state:7101/mcp
       ONCALL_INCIDENT_STATE_MCP_TOKEN: ${ONCALL_INCIDENT_STATE_MCP_TOKEN}
       # ...one URL and one token per capability group
