@@ -104,7 +104,8 @@ decisions:
     runbook_selection: {min_confidence: 0.9}
 ```
 
-In the demo: `./scripts/demo.sh jev local` (Nimble through the Ollama on your machine),
+In the demo: `./scripts/demo.sh jev local` (Nimble through Ollama on your machine, or in the
+`ollama` container after `./scripts/demo.sh ollama docker`),
 `./scripts/demo.sh jev typesafe`, `./scripts/demo.sh jev off`.
 
 ## Data and safety

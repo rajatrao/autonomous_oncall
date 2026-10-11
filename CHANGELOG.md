@@ -31,6 +31,8 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 - `verify_recovery` observability tool: deterministic recovered / settling / not_recovered verdict
   used by the remediation specialist.
 - Optional `remediation.category_actions` policy rule (tighten-only).
+- Optional Ollama container for the demo: `./scripts/demo.sh ollama docker` (compose profile
+  `ollama`), for the agent's models and the Nimble decision model.
 
 ### Changed
 
