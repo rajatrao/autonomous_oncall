@@ -57,9 +57,10 @@ integrations:
     token: "${PLATFORM_OPS_TOKEN}"
   communications:
     provider: slack
-    api_url: "http://slack-sim:8000/api"
+    api_url: "${SLACK_API_URL:-http://slack-sim:8000/api}"
     token: "${SLACK_BOT_TOKEN}"
     channel_name_template: "{incident_id}"
+    announce_channel: "${SLACK_ANNOUNCE_CHANNEL:-}"
   knowledge:
     provider: filesystem
     runbooks_dir: /config/runbooks
