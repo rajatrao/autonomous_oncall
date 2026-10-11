@@ -85,6 +85,21 @@ Postgres, Redis, Prometheus, Loki, an alert evaluator, a chaos controller, a tra
 platform-control service, a Slack simulator and the dashboard. Delete it and the product still builds,
 tests and runs.
 
+### Agent instructions and skills
+
+Each agent has an **instruction**; **skills** are shared know-how that agents use for specific tasks.
+
+| | `agent/agents/<name>/instruction.md` | `agent/skills/<name>/SKILL.md` |
+| --- | --- | --- |
+| What it is | The agent's job description: its role, which tools to call and when, hard rules, and what to report back | A playbook for one technique, written without reference to any agent (for example the update template in `incident-communications`, or how to read metrics in `metrics-analysis`) |
+| How the agent gets it | Always in full, as its system prompt | The agent sees each skill's name and one-line description, and loads the full text with Docker Agent's `read_skill` tool when it is relevant, which keeps prompts short |
+| Scope | One agent | Shared: `deployment-analysis`, for example, is used by Diagnostics, the deployment investigator and Remediation |
+
+`scripts/build_agent.py` inlines both into `dist/oncall-agent.yaml` (`@include` for instructions,
+`@skill` for skills, with the skill's frontmatter checked), so the published agent is one
+self-contained file. To change what an agent may or must do, edit its instruction; to change how a
+task is done well, edit the skill.
+
 ## Documentation
 
 For people **using** the agent (operators, SREs):
