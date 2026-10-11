@@ -82,6 +82,7 @@ integrations:
     # token: ${SLACK_BOT_TOKEN}     # scopes: channels:manage, chat:write
     # channel_name_template: "inc-{incident_id}"
     # fallback_channel: C0123456789
+    # announce_channel: "#incidents"  # posts a link to each new incident channel here
   knowledge:
     provider: filesystem
     runbooks_dir: /config/runbooks  # markdown with frontmatter: title, services, tags

@@ -32,12 +32,14 @@ class SlackCommunications(CommunicationsProvider):
 
     Config: token (bot token with channels:manage and chat:write, scoped to this workspace),
     api_url (default https://slack.com/api; the demo points this at its Slack simulator),
-    fallback_channel (used when channel creation is not permitted).
+    fallback_channel (used when channel creation is not permitted),
+    announce_channel (optional: where to post a link to each new incident channel, e.g. #incidents).
     """
 
     def __init__(self, cfg: dict):
         self.api = cfg.get("api_url", "https://slack.com/api").rstrip("/")
         self.fallback = cfg.get("fallback_channel")
+        self.announce = cfg.get("announce_channel")
         self.client = httpx.Client(timeout=cfg.get("timeout_seconds", 5),
                                    headers={"Authorization": f"Bearer {cfg.get('token', '')}"})
 
@@ -63,7 +65,19 @@ class SlackCommunications(CommunicationsProvider):
                 return {"channel": self.fallback, "delivered": True, "fallback": True}
             raise
         self._call("conversations.setTopic", {"channel": channel, "topic": topic[:250]})
+        self._announce(channel, topic)
         return {"channel": channel, "delivered": True}
+
+    def _announce(self, channel, topic):
+        """Tell people where the incident is handled. The channel exists either way, so a failed
+        announcement is logged rather than failing channel creation."""
+        if not self.announce:
+            return
+        try:
+            self._call("chat.postMessage", {"channel": self.announce,
+                                            "text": f"Incident channel <#{channel}> created: {topic}"})
+        except IntegrationUnavailable as exc:
+            log.warning("could not announce %s in %s: %s", channel, self.announce, exc)
 
     def post(self, channel, text, kind):
         body = self._call("chat.postMessage", {"channel": channel or self.fallback, "text": text,
