@@ -963,6 +963,7 @@ flavors:
       reasoning:
         provider: dmr
         model: ${env.ONCALL_REASONING_MODEL}
+        token_key: ''
         max_tokens: 8192
         provider_opts:
           context_size: 65536
@@ -970,6 +971,7 @@ flavors:
       fast:
         provider: dmr
         model: ${env.ONCALL_FAST_MODEL}
+        token_key: ''
         max_tokens: 4096
         provider_opts:
           context_size: 65536
@@ -983,11 +985,13 @@ flavors:
         provider: ollama
         model: ${env.ONCALL_REASONING_MODEL}
         base_url: ${env.ONCALL_OLLAMA_URL}
+        token_key: ''
         max_tokens: 8192
       fast:
         provider: ollama
         model: ${env.ONCALL_FAST_MODEL}
         base_url: ${env.ONCALL_OLLAMA_URL}
+        token_key: ''
         max_tokens: 4096
   scripted-model:
     models:

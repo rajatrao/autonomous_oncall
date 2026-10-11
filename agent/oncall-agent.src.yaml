@@ -360,6 +360,8 @@ flavors:
         model: "${env.ONCALL_FAST_MODEL}"
         base_url: "${env.ONCALL_MODEL_BASE_URL}"
         token_key: ONCALL_MODEL_API_KEY
+  # Local models need no key. A flavor is merged into the default models above, so the dmr and
+  # ollama models set token_key to "" to drop the default's ONCALL_MODEL_API_KEY.
   # Docker Model Runner. The endpoint is discovered, or taken from MODEL_RUNNER_HOST (set it when
   # Docker Agent itself runs in a container, e.g. http://model-runner.docker.internal).
   dmr:
@@ -367,6 +369,7 @@ flavors:
       reasoning:
         provider: dmr
         model: "${env.ONCALL_REASONING_MODEL}"
+        token_key: ""
         max_tokens: 8192
         provider_opts:
           context_size: 65536
@@ -374,6 +377,7 @@ flavors:
       fast:
         provider: dmr
         model: "${env.ONCALL_FAST_MODEL}"
+        token_key: ""
         max_tokens: 4096
         provider_opts:
           context_size: 65536
@@ -392,11 +396,13 @@ flavors:
         provider: ollama
         model: "${env.ONCALL_REASONING_MODEL}"
         base_url: "${env.ONCALL_OLLAMA_URL}"
+        token_key: ""
         max_tokens: 8192
       fast:
         provider: ollama
         model: "${env.ONCALL_FAST_MODEL}"
         base_url: "${env.ONCALL_OLLAMA_URL}"
+        token_key: ""
         max_tokens: 4096
   # Replaces the LLM with the deterministic scripted model in src/oncall_testing. Used by CI and
   # by the keyless demo. The agents, prompts, tools and policies stay exactly the same.

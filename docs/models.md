@@ -43,6 +43,7 @@ For a one-off run you can also override models directly with Docker Agent's
 ```bash
 ./scripts/demo.sh model dmr          # Docker Model Runner, pulls the model, restarts the agent
 ./scripts/demo.sh model ollama       # Ollama running on your machine
+./scripts/demo.sh ollama docker      # or: run Ollama in a container instead (then `model ollama`)
 ./scripts/demo.sh model dmr ai/qwen3.8:27b ai/qwen3.6:35b-a3b   # pick reasoning and fast yourself
 ./scripts/demo.sh model scripted     # back to the keyless scripted model
 ```
@@ -56,6 +57,12 @@ For a one-off run you can also override models directly with Docker Agent's
   container reaches it at `http://host.docker.internal:11434/v1`. Ollama's default context window is
   too small for this agent's prompts: start it with `OLLAMA_CONTEXT_LENGTH=65536 ollama serve`
   (or set it in the Ollama app settings).
+- **Ollama in a container**: `./scripts/demo.sh ollama docker` adds an `ollama` service to the
+  stack (compose profile `ollama`, image `ollama/ollama`, 64K context, models kept in `.ollama/`).
+  Run it before `model ollama` and `jev local`, which then pull into the container and point the
+  agent and the decision model at `http://ollama:11434/v1`. Nothing to install on the host, but on
+  a Mac the container has no GPU, so a 35B model is slow; raise Docker's memory limit to fit the
+  model (Docker Desktop > Settings > Resources). `./scripts/demo.sh ollama host` switches back.
 
 With DMR the flavor sets a 64K context window, keeps models loaded for 30 minutes between
 incidents and turns off "thinking" for the fast role (models whose template lacks that switch

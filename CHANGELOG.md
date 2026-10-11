@@ -31,6 +31,9 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 - `verify_recovery` observability tool: deterministic recovered / settling / not_recovered verdict
   used by the remediation specialist.
 - Optional `remediation.category_actions` policy rule (tighten-only).
+- Slack `announce_channel`: posts a link to each new incident channel in a channel you choose.
+- Optional Ollama container for the demo: `./scripts/demo.sh ollama docker` (compose profile
+  `ollama`), for the agent's models and the Nimble decision model.
 
 ### Changed
 
@@ -46,6 +49,10 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
 - `schemas/agent-task.schema.json`, `schemas/incident-state.schema.json` and
   `schemas/remediation.schema.json`. No code loaded them, so they could drift from the real data
   unnoticed. The incident event and config schemas, which are enforced at runtime, remain.
+
+### Fixed
+
+- The `dmr` and `ollama` flavors no longer require `ONCALL_MODEL_API_KEY`.
 
 ## [0.1.0] - 2026-10-08
 

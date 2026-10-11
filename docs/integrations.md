@@ -90,6 +90,9 @@ as they are. `loki`: a LogQL `selector` template. Traces have no production prov
 
 `slack` uses `conversations.create`, `chat.postMessage` and `conversations.setTopic` with a bot
 token (`channels:manage`, `chat:write`). `api_url` can point at a Slack-compatible endpoint.
+`announce_channel` (for example `"#incidents"`) posts a link to each new incident channel there, so
+people know where an incident is being handled; the bot must be in that channel, or have
+`chat:write.public` for a public one.
 `webhook` posts JSON to a URL you choose. `log` writes to the server log. Slack is optional:
 with `log` the agent still runs the full lifecycle.
 

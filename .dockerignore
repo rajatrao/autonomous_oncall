@@ -6,3 +6,4 @@
 tests/fixtures/*.applied.json
 demo/app
 dist/*.db
+.ollama/

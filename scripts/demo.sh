@@ -14,6 +14,8 @@
 #                                      choose the model (default: scripted, no API key; see docs/models.md)
 #   ./scripts/demo.sh jev local|typesafe|off [MODEL]
 #                                      optional decision model for bounded decisions (docs/decisions.md)
+#   ./scripts/demo.sh ollama host|docker
+#                                      where Ollama runs: on this machine (default) or in a container
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -86,6 +88,44 @@ open(path, "w").write("\n".join(lines) + "\n")
 PY
 }
 
+ollama_in_docker() { [[ $(val COMPOSE_PROFILES "") == *ollama* ]]; }
+
+ollama_url() {
+  if ollama_in_docker; then echo http://ollama:11434/v1; else echo http://host.docker.internal:11434/v1; fi
+}
+
+ollama_pull() { # pull models into whichever Ollama the demo uses
+  if ollama_in_docker; then
+    docker compose up -d ollama
+    for m in "$@"; do echo "Pulling $m into the ollama container"; docker compose exec -T ollama ollama pull "$m"; done
+  elif command -v ollama >/dev/null; then
+    for m in "$@"; do echo "Pulling $m"; ollama pull "$m"; done
+  else
+    echo "ollama CLI not found; make sure the Ollama server on this machine has: $*" >&2
+  fi
+}
+
+choose_ollama() {
+  ensure_env
+  case ${1:-} in
+    docker) set_env COMPOSE_PROFILES ollama ;;
+    host) set_env COMPOSE_PROFILES "" ;;
+    *) echo "usage: $0 ollama host|docker" >&2; exit 1 ;;
+  esac
+  # Re-point whatever already uses Ollama.
+  [[ $(val ONCALL_AGENT_FLAVOR "") == ollama ]] && set_env ONCALL_OLLAMA_URL "$(ollama_url)"
+  [[ $(val ONCALL_JEV_PROVIDER "") == ollama ]] && set_env ONCALL_JEV_URL "$(ollama_url)"
+  echo "Ollama: ${1} ($(ollama_url))"
+  if [[ $1 == docker ]]; then
+    echo "Give Docker enough memory for your models (Docker Desktop > Settings > Resources)."
+  else
+    docker compose --profile ollama stop ollama 2>/dev/null || true
+  fi
+  if docker compose ps --status running --services 2>/dev/null | grep -qx gateway; then
+    docker compose up -d   # recreates the services whose Ollama URL changed
+  fi
+}
+
 choose_model() {
   local provider=${1:-} reasoning=${2:-} fast=${3:-} flavor
   ensure_env
@@ -97,12 +137,9 @@ choose_model() {
       ;;
     ollama)
       flavor=ollama; reasoning=${reasoning:-qwen3.6:35b-a3b}; fast=${fast:-$reasoning}
-      if command -v ollama >/dev/null; then
-        for m in $(printf '%s\n' "$reasoning" "$fast" | sort -u); do echo "Pulling $m"; ollama pull "$m"; done
-      else
-        echo "ollama CLI not found; make sure the Ollama server on this machine has $reasoning and $fast." >&2
-      fi
-      echo "Start Ollama with a large context window, e.g.:  OLLAMA_CONTEXT_LENGTH=65536 ollama serve"
+      ollama_pull $(printf '%s\n' "$reasoning" "$fast" | sort -u)
+      set_env ONCALL_OLLAMA_URL "$(ollama_url)"
+      ollama_in_docker || echo "Start Ollama with a large context window, e.g.:  OLLAMA_CONTEXT_LENGTH=65536 ollama serve"
       ;;
     anthropic)
       flavor=anthropic; reasoning=${reasoning:-claude-sonnet-5-5}; fast=${fast:-claude-haiku-5-5}
@@ -132,10 +169,9 @@ choose_jev() {
   case $where in
     local)
       model=${model:-nimble}
-      if command -v ollama >/dev/null; then echo "Pulling $model (Ollama >= 0.35)"; ollama pull "$model"
-      else echo "ollama CLI not found; make sure the Ollama server on this machine has $model (Ollama >= 0.35)." >&2; fi
+      ollama_pull "$model"   # needs Ollama >= 0.35
       set_env ONCALL_JEV_ENABLED true; set_env ONCALL_JEV_PROVIDER ollama
-      set_env ONCALL_JEV_URL http://host.docker.internal:11434/v1; set_env ONCALL_JEV_MODEL "$model"
+      set_env ONCALL_JEV_URL "$(ollama_url)"; set_env ONCALL_JEV_MODEL "$model"
       ;;
     typesafe)
       model=${model:-jev-latest}
@@ -186,7 +222,8 @@ MSG
     ;;
   model) choose_model "${2:-}" "${3:-}" "${4:-}" ;;
   jev) choose_jev "${2:-}" "${3:-}" "${4:-}" ;;
+  ollama) choose_ollama "${2:-}" ;;
   approve) decide approve "${2:-}" ;;
   reject) decide reject "${2:-}" ;;
-  *) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac
