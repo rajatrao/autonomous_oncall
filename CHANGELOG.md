@@ -49,6 +49,10 @@ All notable changes to the agent artifact and the gateway/MCP images. The format
   `schemas/remediation.schema.json`. No code loaded them, so they could drift from the real data
   unnoticed. The incident event and config schemas, which are enforced at runtime, remain.
 
+### Fixed
+
+- The `dmr` and `ollama` flavors no longer require `ONCALL_MODEL_API_KEY`.
+
 ## [0.1.0] - 2026-10-08
 
 First proof of concept.

@@ -85,13 +85,17 @@ def agent_env(tmp_path, monkeypatch):
         # Provider flavors are exercised against the scripted model too: only the transport differs.
         child_env.update(ONCALL_REASONING_MODEL="scripted-oncall", ONCALL_FAST_MODEL="scripted-oncall",
                          ONCALL_OLLAMA_URL=f"{model_url}/v1", ONCALL_MODEL_BASE_URL=f"{model_url}/v1",
-                         ONCALL_MODEL_API_KEY="test", MODEL_RUNNER_HOST=model_url)
+                         MODEL_RUNNER_HOST=model_url)
 
         def run_agent(message="Wake-up: incident_id=TEST-1\nreason: event", flavor="scripted-model"):
+            env = dict(child_env)
+            env.pop("ONCALL_MODEL_API_KEY", None)  # local models (dmr, ollama) must run without a key
+            if flavor == "openai-compatible":
+                env["ONCALL_MODEL_API_KEY"] = "test"
             proc = subprocess.run(
                 [BINARY, "run", "--exec", "--safety", "restricted", "--flavor", flavor,
                  "--data-dir", str(tmp_path / "da"), str(ROOT / "dist" / "oncall-agent.yaml"), message],
-                env=child_env, capture_output=True, text=True, timeout=600)
+                env=env, capture_output=True, text=True, timeout=600)
             assert proc.returncode == 0, proc.stderr[-2000:]
             return proc.stdout
 
