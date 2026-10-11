@@ -139,6 +139,7 @@ services:
       <<: *mcp-env
       ONCALL_COMMUNICATIONS_MCP_TOKEN: ${ONCALL_COMMUNICATIONS_MCP_TOKEN:-demo-only-mcp-comms}
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-xoxb-demo-only}
+      SLACK_API_URL: ${SLACK_API_URL:-http://slack-sim:8000/api}   # https://slack.com/api for real Slack
   mcp-knowledge:
     <<: *mcp
     command: [knowledge, --port, "7106"]
