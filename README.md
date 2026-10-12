@@ -9,14 +9,6 @@ When an alert fires, an **Incident Commander** agent triages it, fans out parall
 RCA from the first minute to the last. It never gets a shell: every production change goes through
 a small set of typed operations that a policy engine allows, parks for human approval, or denies.
 
-```
-alert source ──► gateway ──► durable incident state ──► Docker Agent ──► MCP capability servers ──► your systems
- (webhook,        (validate,     (Postgres/SQLite:        (Commander +     (incident_state, observability,
-  queue,           dedupe,        incidents, tasks,        Triage,          changes, remediation*,
-  Alertmanager,    retry,         actions, RCA, audit)     Diagnostics,     communications, knowledge)
-  PagerDuty)       approvals)                              Remediation,     * the policy engine lives here
-                                                           Comms, RCA)
-```
 ## Architecture
 ```
                        ALERT SOURCES
