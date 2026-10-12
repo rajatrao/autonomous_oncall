@@ -17,9 +17,103 @@ alert source ──► gateway ──► durable incident state ──► Docker
   PagerDuty)       approvals)                              Remediation,     * the policy engine lives here
                                                            Comms, RCA)
 ```
+## Architecture
+```
+                       ALERT SOURCES
+                Alertmanager | PagerDuty
+                      JSON Webhooks
+                            |
+                            v
+                  +--------------------+
+                  |  Incident Gateway  |
+                  | Validate / Dedup   |
+                  | Retry / Approvals  |
+                  +--------------------+
+                            |
+                            v
+                  +--------------------+
+                  | Durable Incident   |
+                  | State and Tasks    |
+                  +--------------------+
+                            |
+                            v
+                  +--------------------+
+                  | Incident Commander |
+                  |(Orchestrator Agent)|
+                  +--------------------+
+                            |
+           +----------------+----------------+
+           |                |                |
+           v                v                v
+   +---------------+ +---------------+ +---------------+
+   | Triage Agent  | | Investigation  | | Communication |
+   |               | |    Agents     | |     Agent     |
+   +---------------+ +---------------+ +---------------+
+           |                |                |
+           v                v                v
+   +---------------+ +---------------+ +---------------+
+   | Alert Context | | Metrics, Logs | | Slack Updates  |
+   | & Priorities  | | Deployments   | | Stakeholder    |
+   |               | | Dependencies  | | Notifications  |
+   +---------------+ +---------------+ +---------------+
+           |                |                |
+           +----------------+----------------+
+                            |
+                            v
+                  +--------------------+
+                  | Evidence &         |
+                  | Root Cause Analysis|
+                  +--------------------+
+                            |
+                            v
+                  +--------------------+
+                  | Remediation Agent  |
+                  | Policy Enforcement |
+                  | Approval Workflow  |
+                  +--------------------+
+                            |
+                            v
+                  +--------------------+
+                  | Recovery           |
+                  | Verification       |
+                  +--------------------+
+                            |
+                            v
+                  +--------------------+
+                  | Incident Closure   |
+                  | Final RCA & Report |
+                  +--------------------+
 
-## 5-minute demo
+        Agents interact with infrastructure through
+             MCP capability servers and integrations
+```
+Specialized Agents
+- Incident Commander: Coordinates the incident lifecycle, delegates investigation tasks, and manages the overall response.
+- Triage Agent: Validates alerts, assesses severity, and establishes initial incident context.
+-Investigation Agents: Analyze metrics, logs, deployments, dependencies, and historical evidence to identify probable root causes.
+- Communication Agent: Sends incident updates, communicates status and findings to stakeholders, and keeps incident communications synchronized with investigation progress.
+- Remediation Agent: Evaluates and executes permitted corrective actions, respecting policy restrictions and human approval requirements.
+- Recovery Verification: Confirms that the mitigation has restored expected service behavior before the incident is closed.
 
+MCP capability servers provide controlled access to observability, incident state, remediation, communication, and knowledge systems. They are the integration layer used by agents, rather than substitutes for the specialized agents themselves.
+
+## Features
+
+- Automated incident triage — Validate incoming alerts, deduplicate events, and maintain incident state.
+- Parallel investigations — Investigate metrics, logs, deployments, dependencies, and historical incidents concurrently.
+- Evidence-based diagnosis — Build hypotheses from multiple signals rather than relying on a single alert.
+- Policy-controlled remediation — Allow, require approval for, or deny proposed production changes.
+- Automated recovery verification — Check whether the mitigation actually resolves the incident.
+- Incident communications — Keep stakeholders updated through configured communication integrations.
+- Automatic root-cause analysis — Maintain an incident timeline and generate an RCA.
+- Human-in-the-loop approvals — Require human authorization for sensitive operations.
+- Multiple AI model providers — Support configurable local and hosted models.
+- Extensible integrations — Connect observability, change management, remediation, communication, and knowledge systems.
+- Reproducible demo environment — Simulate realistic production incidents locally with Docker Compose.
+## Demo
+
+- [Youtube](https://www.youtube.com/watch?v=Sp8Mow_zTO0) 
+### Steps
 You need Docker with Compose. No API key is required: the demo uses a deterministic
 "scripted model" so it behaves the same every time (switch to a real model below).
 
@@ -84,6 +178,26 @@ The **reference demo** lives in `demo/` and `compose.yaml`: payment-api, bank-ap
 Postgres, Redis, Prometheus, Loki, an alert evaluator, a chaos controller, a traffic generator, a
 platform-control service, a Slack simulator and the dashboard. Delete it and the product still builds,
 tests and runs.
+
+### Integrations
+Autonomous On-Call is designed to work with existing infrastructure and operational tooling.
+
+
+| Category | Examples |
+| --- | --- |
+| Alert ingestion	   |       Prometheus Alertmanager, PagerDuty, JSON webhooks| 
+| Metrics and observability| 	Prometheus| 
+| Logs| 	                    Loki| 
+| Change intelligence| 	      GitHub and HTTP-based change feeds| 
+| Remediation| 	              HTTP operations APIs and Kubernetes integrations| 
+| Communications| 	          Slack and webhooks| 
+| Knowledge	|                 Markdown runbooks and filesystem-based knowledge| 
+| AI orchestration| 	        Docker Agent| 
+| Tool connectivity| 	        Model Context Protocol (MCP)| 
+
+Integration availability depends on the configured provider and the environment.
+
+
 
 ### Agent instructions and skills
 
