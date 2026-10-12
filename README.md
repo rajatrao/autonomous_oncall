@@ -88,6 +88,57 @@ Specialized Agents
 
 MCP capability servers provide controlled access to observability, incident state, remediation, communication, and knowledge systems. They are the integration layer used by agents, rather than substitutes for the specialized agents themselves.
 
+### Docker Agent: The Runtime Behind On-Call
+
+The oncall repository uses Docker Agent to define and run its AI-powered incident response workflow.
+
+Instead of relying on a single agent for everything, an Incident Commander coordinates specialized investigations. These agents access observability data, deployment information, incident history, and remediation capabilities through MCP servers.
+
+The repository packages its agent configuration into dist/oncall-agent.yaml, making the workflow easier to build, distribute, and version.
+
+Key architectural principle: Docker Agent coordinates the AI workflow, while the surrounding services manage incident state, permissions, and production actions. Agents can investigate incidents and recommend fixes without unrestricted access to production infrastructure.
+
+### Multiple LLMs for Different Jobs
+
+The repository supports configurable model providers, including local and hosted models. This allows teams to choose models based on task complexity, latency, cost, and privacy requirements.
+
+For example:
+
+Fast models: Routine alert triage, classification, and incident summaries.
+Reasoning models: Complex investigations, root-cause analysis, and comparison of competing hypotheses.
+Specialized models: Structured analysis and other tasks where a dedicated model provides measurable benefits.
+
+In a payment outage, one model could summarize metrics and logs while a stronger reasoning model investigates whether the root cause is a recent deployment or a failing external dependency.
+
+This approach allows teams to optimize cost and performance without redesigning the entire incident response workflow.
+
+### SystemOne: An Additional Decision Layer
+
+An interesting extension is integrating SystemOne, which provides Jev-compatible interfaces for structured decisions.
+
+Generative LLMs are useful for investigating incidents and explaining possible causes. A typed decision model can complement them by evaluating more narrowly defined questions:
+
+- Which hypothesis best fits the available evidence?
+- How severe is the incident?
+- Is there enough evidence to proceed?
+- Which remediation option should be evaluated next?
+
+For example, on-call agents could collect evidence about a failing dependency, while a Jev-compatible model evaluates a predefined set of possible explanations.
+
+The result would then pass through application validation and remediation policies before any production action is permitted.
+
+The architecture separates four responsibilities:
+
+Component	Responsibility
+- Docker Agent	Coordinates incident investigations and specialized agents
+- LLMs	Analyze evidence, generate hypotheses, and explain findings
+- SystemOne model optionally could provide structured decisions through an additional integration
+- Policy and verification services	Govern remediation, enforce permissions, and confirm recovery
+
+This separation avoids relying on a single AI model to investigate an incident, authorize production changes, and determine whether recovery succeeded.
+
+The goal is to build an incident response system where AI reasoning, structured decision-making, and operational safety work together.
+
 ## Features
 
 - Automated incident triage — Validate incoming alerts, deduplicate events, and maintain incident state.
