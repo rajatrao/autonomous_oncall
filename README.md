@@ -1,7 +1,6 @@
 # Autonomous On-Call
 
-An autonomous production on-call team, built on [Docker Agent](https://docs.docker.com/ai/docker-agent/)
-and distributed as an OCI artifact.
+An autonomous production on-call team, built on [Docker Agent](https://docs.docker.com/ai/docker-agent/).
 
 When an alert fires, an **Incident Commander** agent triages it, fans out parallel investigations
 (metrics, logs, changes, dependencies, history), forms evidence-backed hypotheses, proposes or runs a
@@ -249,9 +248,6 @@ Everything here is documented Docker Agent functionality, pinned and tested agai
   environment ([Models](https://docs.docker.com/ai/docker-agent/configuration/models/))
 - `docker agent serve api` with `--auth-token` (how the gateway runs the agent):
   [API server](https://docs.docker.com/ai/docker-agent/features/api-server/)
-- `docker agent share push` / `run <oci-ref>` with optional signing:
-  [Agent distribution](https://docs.docker.com/ai/docker-agent/concepts/distribution/),
-  [CLI](https://docs.docker.com/ai/docker-agent/features/cli/)
 
 ## Status
 
